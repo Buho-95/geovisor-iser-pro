@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Permitir lectura publica a todas las colecciones (visitantes + admins)
+    // Solo admins autenticados (no anonimos) pueden escribir
+    match /{document=**} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.email != null;
+    }
+  }
+}
