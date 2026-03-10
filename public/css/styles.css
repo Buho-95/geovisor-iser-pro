@@ -1,58 +1,64 @@
 /* ═══════════════════════════════════════════════════════════
    GEOVISOR ISER — Glassmorphism Institucional Theme
-   Paleta: Azul Medianoche / Verde Esmeralda / Azul / Rojo
+   Paleta: Verde Institucional / Azul Secundario / Rojo Acción
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-  /* Core Palette */
-  --midnight: #0b1220;
-  --midnight-light: #111b2e;
-  --midnight-mid: #162036;
-  --panel-bg: rgba(16, 24, 44, 0.85);
-  --panel-bg-solid: #10182c;
-  --glass-bg: rgba(16, 24, 44, 0.7);
-  --glass-border: rgba(26, 154, 107, 0.12);
+  /* Core Palette — Verde Institucional */
+  --midnight: #1a3a1a;
+  --midnight-light: #1e4420;
+  --midnight-mid: #224a24;
+  --midnight-base: #1a3a1a;
+  --panel-bg: rgba(26, 58, 26, 0.88);
+  --panel-bg-solid: #1e4420;
+  --glass-bg: rgba(26, 58, 26, 0.72);
+  --glass-border: rgba(46, 125, 50, 0.20);
   --glass-blur: 20px;
 
-  /* Primary — Emerald Green */
-  --cyan: #1a9a6b;
-  --cyan-dim: rgba(26, 154, 107, 0.15);
-  --cyan-glow: rgba(26, 154, 107, 0.35);
+  /* Primary — Verde Institucional */
+  --cyan: #2E7D32;
+  --cyan-dim: rgba(46, 125, 50, 0.18);
+  --cyan-glow: rgba(46, 125, 50, 0.40);
 
-  /* Secondary — Blue */
-  --pink: #3388d6;
-  --pink-dim: rgba(51, 136, 214, 0.15);
-  --pink-glow: rgba(51, 136, 214, 0.35);
+  /* Secondary — Azul Secundario */
+  --pink: #1976D2;
+  --pink-dim: rgba(25, 118, 210, 0.15);
+  --pink-glow: rgba(25, 118, 210, 0.35);
 
-  /* Accent — Danger Red */
-  --danger: #e53935;
-  --danger-dim: rgba(229, 57, 53, 0.15);
-  --danger-glow: rgba(229, 57, 53, 0.35);
+  /* Accent — Rojo de Acción */
+  --danger: #D32F2F;
+  --danger-dim: rgba(211, 47, 47, 0.15);
+  --danger-glow: rgba(211, 47, 47, 0.35);
 
   /* Status */
-  --green: #00e676;
-  --green-dim: rgba(0, 230, 118, 0.15);
+  --green: #66BB6A;
+  --green-dim: rgba(102, 187, 106, 0.18);
   --amber: #ffab00;
   --amber-dim: rgba(255, 171, 0, 0.15);
 
   /* Text */
-  --text-primary: #e8edf5;
-  --text-secondary: #8892a8;
-  --text-muted: #5a6478;
+  --text-primary: #e8f5e9;
+  --text-secondary: #a5d6a7;
+  --text-muted: #6b9c6e;
   --text-heading: #ffffff;
 
   /* Borders & Surfaces */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-active: rgba(26, 154, 107, 0.3);
-  --surface-hover: rgba(255, 255, 255, 0.04);
-  --surface-active: rgba(26, 154, 107, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(46, 125, 50, 0.35);
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --surface-active: rgba(46, 125, 50, 0.10);
 
-  /* Sizing */
+  /* Sizing (sin cambios) */
   --header-h: 56px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
   --radius-xl: 20px;
+}
+
+/* Logos en Blanco */
+.logo-white {
+  filter: brightness(0) invert(1);
 }
 
 /* ───── Base ───── */
@@ -94,7 +100,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 999999;
-  background: radial-gradient(ellipse at 30% 50%, #121e36 0%, var(--midnight) 70%);
+  background: radial-gradient(ellipse at 30% 50%, #1e4420 0%, var(--midnight) 70%);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -138,7 +144,7 @@ body {
 .login-icon-pin {
   width: 64px;
   height: 64px;
-  background: linear-gradient(135deg, var(--cyan), #0d7a52);
+  background: linear-gradient(135deg, var(--cyan), #1B5E20);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -521,7 +527,7 @@ body {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
   z-index: 10;
-  background: #1a2340;
+  background: #1a3a1a;
 }
 
 /* Logo overlay on map */
