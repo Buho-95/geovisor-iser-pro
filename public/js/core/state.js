@@ -11,7 +11,8 @@ export const state = {
   currentBlockId: null,
   currentFileViewing: null,
   capasActivas: new Set(),
-  dashboardData: null
+  dashboardData: null,
+  currentSede: 'pamplona' // 'pamplona' | 'rinconada' | 'caldera'
 };
 
 export function setUser(user) {
@@ -27,4 +28,9 @@ export function setArchivos(archivos) {
 export function setCurrentBlock(id) {
   state.currentBlockId = id;
   emit(EVENTS.BLOCK_SELECTED, id);
+}
+
+export function setSede(sede) {
+  state.currentSede = sede;
+  emit(EVENTS.SEDE_CHANGED, sede);
 }

@@ -423,14 +423,32 @@ export function generarOpcionesCarpetasUpload() {
 
 /**
  * Funciones globales para interacción del menú
+ * Accordion exclusivo: solo una carpeta principal abierta a la vez
  */
 window.toggleCarpeta = function (carpetaId) {
   const contenido = document.getElementById(`contenido-${carpetaId}`);
   const icono = document.getElementById(`icon-${carpetaId}`);
+  if (!contenido || !icono) return;
 
-  if (contenido && icono) {
-    contenido.classList.toggle('hidden');
-    icono.classList.toggle('rotate-180');
+  const isCurrentlyOpen = !contenido.classList.contains('hidden');
+
+  // Close ALL open folders first
+  document.querySelectorAll('.carpeta-contenido').forEach(c => {
+    c.classList.add('hidden');
+  });
+  document.querySelectorAll('[id^="icon-"]').forEach(i => {
+    i.classList.remove('rotate-180');
+  });
+
+  // If it was closed, open it (toggle behavior)
+  if (!isCurrentlyOpen) {
+    contenido.classList.remove('hidden');
+    icono.classList.add('rotate-180');
+    // Auto-cargar archivos para carpetas tipo 'directo' (ej: 07_Matriz_Accesibilidad)
+    const directContainer = document.getElementById(`subcarpeta-container-${carpetaId}`);
+    if (directContainer && directContainer.innerHTML.trim() === '') {
+      seleccionarSubcarpeta(carpetaId, carpetaId);
+    }
   }
 };
 

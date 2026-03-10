@@ -55,6 +55,8 @@
                 <div class="login-brand">ISER</div>
                 <div class="login-subtitle">Geovisor de Infraestructura</div>
 
+                <img src="assets/LOGO SENCILLO.png" alt="ISER Logo" class="login-logo-sencillo logo-white">
+
                 <button type="button" id="btn-visitor" class="btn-visitor">
                     <i class="ph ph-globe"></i>
                     Ingresar como Visitante
@@ -175,9 +177,11 @@
         <main class="app-main">
             <!-- ───── LEFT: Map (60%) ───── -->
             <section class="map-column">
-                <div class="map-sede-selector" id="sede-selector">
-                    Sede Principal - Pamplona
-                </div>
+                <select class="map-sede-selector" id="sede-selector">
+                    <option value="pamplona">SEDE PRINCIPAL - PAMPLONA</option>
+                    <option value="rinconada">GRANJA LA RINCONADA - PAMPLONA</option>
+                    <option value="caldera">FINCA LA CALDERA - MUTISCUA</option>
+                </select>
                 <div id="map"></div>
                 <div class="map-coords-bar">
                     <div class="coords">

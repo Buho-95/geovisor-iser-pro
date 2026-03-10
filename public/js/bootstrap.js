@@ -1,7 +1,7 @@
 /**
  * Bootstrap: inicializa la app con lazy loading de módulos opcionales.
  */
-import { state } from './core/state.js';
+import { state, setSede } from './core/state.js';
 import { initAuth } from './services/auth.js';
 import { startArchivosSync } from './services/firestore.js';
 import { init as initLayerManager } from './plugins/layer-manager.js';
@@ -95,6 +95,17 @@ export async function bootstrap() {
     }
     doInitGlobalView();
   });
+
+  // ─── Sede Selector: Multi-Campus ───
+  const sedeSelector = document.getElementById('sede-selector');
+  if (sedeSelector) {
+    sedeSelector.addEventListener('change', (e) => {
+      const nuevaSede = e.target.value;
+      setSede(nuevaSede);
+      console.log(`🏛️ Sede cambiada a: ${nuevaSede} — Listo para cargar datos de nueva sede.`);
+      // TODO: Cargar estructura de carpetas y datos correspondientes a la nueva sede
+    });
+  }
 
   document.getElementById('btn-volver')?.addEventListener('click', doInitGlobalView);
 

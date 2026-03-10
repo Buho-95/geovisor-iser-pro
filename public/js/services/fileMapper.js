@@ -39,7 +39,13 @@ export function getPathsForFilter(filterType) {
             ];
         case 'img':
             return [
-                { path: '08_Registro_Fotografico', label: 'Registro Fotográfico' }
+                { path: '08_Registro_Fotografico', label: 'Registro Fotográfico' },
+                { path: '08_Registro_Fotografico/01_2025', label: 'Fotos 2025' },
+                { path: '08_Registro_Fotografico/02_2026_1', label: 'Fotos 2026 P1' }
+            ];
+        case 'docs':
+            return [
+                { path: '07_Matriz_Accesibilidad_NTC_6047', label: 'Matriz Accesibilidad NTC 6047' }
             ];
         default:
             return [];

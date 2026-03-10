@@ -14,6 +14,7 @@ let blockPreviewDispose3D = null;
 let blockPreviewWired = false;
 let blockPreviewActiveTab = '3d';
 let blockPreviewLastBlockId = null;
+let _subcarpetaHandler = null;
 
 function normalizeKey(s) {
   return String(s || '')
@@ -1336,7 +1337,12 @@ export function showBlockView(id, getArbolHTML) {
   arbolContainer.innerHTML = generarMenuPlanoteca(id);
 
   // Configurar evento para cuando se selecciona una subcarpeta
-  document.addEventListener('subcarpetaSeleccionada', handleSubcarpetaSeleccionada);
+  // Fix: remover handler anterior para evitar leak de event listeners
+  if (_subcarpetaHandler) {
+    document.removeEventListener('subcarpetaSeleccionada', _subcarpetaHandler);
+  }
+  _subcarpetaHandler = handleSubcarpetaSeleccionada;
+  document.addEventListener('subcarpetaSeleccionada', _subcarpetaHandler);
 
 
 
@@ -1448,6 +1454,11 @@ function handleSubcarpetaSeleccionada(event) {
     if (fileManager) {
       setTimeout(() => {
         fileManager.renderFilesList(ruta, listContainer, badgeContainer);
+        // Fix: wire viewer delegation for in-situ file list items (data-open-viewer)
+        setupViewerDelegation(inSituContainer, (file) => {
+          import('./visor.js').then(({ openViewer }) => openViewer(file))
+            .catch(err => console.error('Error cargando visor:', err));
+        });
       }, 50);
     } else {
       listContainer.innerHTML = '<div class="text-sm text-red-500 p-2">Error: FileManager no disponible</div>';

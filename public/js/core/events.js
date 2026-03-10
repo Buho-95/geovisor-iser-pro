@@ -12,7 +12,8 @@ export const EVENTS = {
   VIEWER_OPEN: 'viewer:open',
   LAYER_TOGGLE: 'map:layerToggle',
   DASHBOARD_LOAD: 'dashboard:load',
-  BIM_VIEWER_OPEN: 'bim:open'
+  BIM_VIEWER_OPEN: 'bim:open',
+  SEDE_CHANGED: 'sede:changed'
 };
 
 export function on(event, callback) {

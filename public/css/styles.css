@@ -171,6 +171,13 @@ body {
   margin-top: 0.25rem;
 }
 
+.login-logo-sencillo {
+  max-width: 140px;
+  height: auto;
+  margin: 1.25rem auto 0.5rem;
+  display: block;
+}
+
 .btn-visitor {
   margin-top: 1.5rem;
   width: 100%;
@@ -546,7 +553,7 @@ body {
   top: 66px;
   left: 20px;
   z-index: 20;
-  padding: 8px 14px;
+  padding: 8px 34px 8px 14px;
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border);
@@ -554,6 +561,27 @@ body {
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 600;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  outline: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a5d6a7' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.map-sede-selector:hover,
+.map-sede-selector:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px var(--cyan-dim);
+}
+
+.map-sede-selector option {
+  background: var(--midnight-mid);
+  color: var(--text-primary);
+  padding: 8px;
 }
 
 .map-floating-block {
@@ -2109,4 +2137,29 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PLANOTECA / BASE DE DATOS — Accordion & Title Styles
+   ═══════════════════════════════════════════════════════════ */
+
+/* Folder titles: stronger/darker text for contrast on white-ish bg */
+.carpeta-header h4 {
+  color: #1a3a1a !important;
+  font-weight: 700 !important;
+}
+
+.carpeta-header p {
+  color: #4a6f4a !important;
+}
+
+/* Root folder title + icon in WHITE */
+.planoteca-menu>.mb-4 h3,
+.planoteca-menu>.mb-4 h3 i {
+  color: #FFFFFF !important;
+}
+
+/* "Planoteca Estructurada" subtitle in white */
+.planoteca-menu>.mb-4>p {
+  color: rgba(255, 255, 255, 0.85) !important;
 }
