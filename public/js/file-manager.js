@@ -171,7 +171,7 @@ class FileManager {
     ];
 
     const maxSize = 50 * 1024 * 1024; // 50MB
-    const validExtensions = ['.pdf', '.dwg', '.dxf', '.rvt', '.ifc', '.xlsx', '.xls', '.jpg', '.jpeg', '.png', '.gif', '.skp'];
+    const validExtensions = ['.pdf', '.dwg', '.dxf', '.rvt', '.ifc', '.xlsx', '.xls', '.csv', '.jpg', '.jpeg', '.png', '.gif', '.skp', '.glb', '.gltf'];
 
     // Validar por tipo MIME
     if (validTypes.includes(file.type)) return true;
@@ -249,7 +249,10 @@ class FileManager {
       '.jpg': 'ph-image',
       '.jpeg': 'ph-image',
       '.png': 'ph-image',
-      '.gif': 'ph-image'
+      '.gif': 'ph-image',
+      '.glb': 'ph-cube',
+      '.gltf': 'ph-cube',
+      '.csv': 'ph-file-xls'
     };
 
     return iconMap[extension] || 'ph-file';
@@ -267,6 +270,8 @@ class FileManager {
     if (['.rvt', '.ifc'].includes(extension)) return 'rvt';
     if (['.jpg', '.jpeg', '.png', '.gif'].includes(extension)) return 'img';
     if (['.xlsx', '.xls'].includes(extension)) return 'excel';
+    if (['.csv'].includes(extension)) return 'csv';
+    if (['.glb', '.gltf'].includes(extension)) return 'glb';
 
     return 'otro';
   }
@@ -345,6 +350,9 @@ class FileManager {
       '.ifc': 'ifc',
       '.xlsx': 'excel',
       '.xls': 'excel',
+      '.csv': 'csv',
+      '.glb': 'glb',
+      '.gltf': 'glb',
       '.jpg': 'img',
       '.jpeg': 'img',
       '.png': 'img',
@@ -518,6 +526,8 @@ class FileManager {
       rvt: { icon: 'ph-cube', color: 'var(--cyan)' },
       ifc: { icon: 'ph-cube', color: 'var(--amber)' },
       excel: { icon: 'ph-file-xls', color: 'var(--green)' },
+      csv: { icon: 'ph-file-xls', color: 'var(--green)' },
+      glb: { icon: 'ph-cube', color: 'var(--cyan)' },
       img: { icon: 'ph-image', color: '#a855f7' },
     };
 

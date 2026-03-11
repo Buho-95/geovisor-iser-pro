@@ -43,7 +43,7 @@ export const estructuraPlanimetriaISER = {
     "descripcion": "Visualizaciones 3D y material de presentación"
   },
   "06_Documentos": {
-    "tipo": "directo",
+    "subcarpetas": ["Certificados", "Licencias", "Actas", "Otros"],
     "icono": "ph-file-text",
     "color": "#64748B",
     "descripcion": "Documentación técnica y legal del proyecto"
@@ -55,10 +55,10 @@ export const estructuraPlanimetriaISER = {
     "descripcion": "Matriz de accesibilidad conforme a NTC 6047"
   },
   "08_Registro_Fotografico": {
-    "subcarpetas": [
-      "01_2025",
-      "02_2026_1"
-    ],
+    "especialidades": {
+      "01_2025": [],
+      "02_2026_1": []
+    },
     "icono": "ph-camera",
     "color": "#F97316",
     "descripcion": "Registro fotográfico del avance de obra"
@@ -154,7 +154,11 @@ export function formatearNombreCarpeta(clave) {
     "01_Electricos": "Eléctricos",
     "02_Redes_de_Datos": "Redes de Datos",
     "01_Gas": "Gas",
-    "02_Hidrosanitarios": "Hidrosanitarios"
+    "02_Hidrosanitarios": "Hidrosanitarios",
+    "Certificados": "Certificados",
+    "Licencias": "Licencias",
+    "Actas": "Actas",
+    "Otros": "Otros"
   };
 
   return reemplazos[clave] || clave.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -215,7 +219,11 @@ function obtenerIconoSubcarpeta(subcarpeta) {
     "01_Renders": "ph-image",
     "02_Presentaciones": "ph-presentation",
     "01_2025": "ph-calendar",
-    "02_2026_1": "ph-calendar"
+    "02_2026_1": "ph-calendar",
+    "Certificados": "ph-certificate",
+    "Licencias": "ph-stamp",
+    "Actas": "ph-clipboard-text",
+    "Otros": "ph-dots-three"
   };
 
   return iconos[subcarpeta] || "ph-folder";

@@ -227,6 +227,18 @@ export function setupUpload() {
   setupFolderCascade();
 
   document.getElementById('btn-open-upload').addEventListener('click', () => {
+    // Guard: require a block to be selected before opening upload
+    if (!state.currentBlockId) {
+      // Show notification using FileManager if available, otherwise inline toast
+      const fm = getFileManager();
+      if (fm) {
+        fm.showNotification('Por favor, selecciona un bloque en el mapa primero', 'warning');
+      } else {
+        alert('Por favor, selecciona un bloque en el mapa primero');
+      }
+      return;
+    }
+
     setupFolderCascade();
 
     document.getElementById('upload-modal').classList.add('activo');
@@ -430,9 +442,16 @@ function detectFileType(file) {
   // IFC
   if (type.includes('ifc') || name.endsWith('.ifc')) return 'ifc';
 
+  // 3D Models (GLB/GLTF)
+  if (name.endsWith('.glb') || name.endsWith('.gltf') ||
+    type.includes('model/gltf')) return 'glb';
+
   // Excel
   if (type.includes('excel') || type.includes('spreadsheet') ||
     name.endsWith('.xlsx') || name.endsWith('.xls')) return 'excel';
+
+  // CSV
+  if (type.includes('csv') || name.endsWith('.csv')) return 'csv';
 
   // Imágenes
   if (type.includes('image') ||

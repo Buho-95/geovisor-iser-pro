@@ -113,6 +113,9 @@ export function initAuth(callbacks = {}) {
     state.user = u;
     setUser(u);
 
+    // Hide loading screen once Firebase has resolved auth state
+    const loadingScreen = document.getElementById('loading-screen');
+
     if (u && !u.isAnonymous) {
       // ── Admin recuperado por persistencia ──
       state.userRole = 'admin';
@@ -137,17 +140,24 @@ export function initAuth(callbacks = {}) {
       const btnExitV = document.getElementById('btn-exit-visitor');
       if (btnExitV) btnExitV.classList.add('hidden');
 
-      // Transicionar al app si estamos en el login
+      // Transicionar directo al app (sin mostrar login)
       const authScreen = document.getElementById('auth-screen');
-      if (authScreen && !authScreen.classList.contains('hidden-auth')) {
-        authScreen.classList.add('hidden-auth');
-        document.getElementById('app-container')?.classList.add('visible');
-        onLoginSuccess?.();
-      }
+      if (authScreen) authScreen.classList.add('hidden-auth');
+      document.getElementById('app-container')?.classList.add('visible');
+
+      // Hide loading screen with fade
+      if (loadingScreen) loadingScreen.classList.add('loading-hidden');
+
+      onLoginSuccess?.();
     } else if (!u) {
       // ── Sin sesión: mostrar login ──
       state.userProfile = null;
       state.userRole = null;
+
+      // Reveal auth-screen and hide loading
+      const authScreen = document.getElementById('auth-screen');
+      if (authScreen) authScreen.classList.remove('hidden-auth');
+      if (loadingScreen) loadingScreen.classList.add('loading-hidden');
     }
     onAuthChange?.(u);
   });

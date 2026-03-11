@@ -10,6 +10,7 @@ export const EVENTS = {
   MAP_READY: 'map:ready',
   FIRESTORE_SYNC: 'firestore:sync',
   VIEWER_OPEN: 'viewer:open',
+  FILE_DELETED: 'file:deleted',
   LAYER_TOGGLE: 'map:layerToggle',
   DASHBOARD_LOAD: 'dashboard:load',
   BIM_VIEWER_OPEN: 'bim:open',

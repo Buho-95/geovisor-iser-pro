@@ -1,9 +1,15 @@
 import { state } from './core/state.js';
 import { emit, EVENTS } from './core/events.js';
+import { ref as storageRef, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+import { doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { storage, db } from './services/firebase.js';
+import { dbPath } from './core/config.js';
+import { init3DViewer } from './viewer3D.js';
 
 // Instancias globales de los visores para limpieza de memoria
 let cadViewerInstance = null;
 let bimViewerInstance = null;
+let viewer3DInstance = null;
 let currentViewerType = null;
 
 // 🎯 Elementos del DOM del visor
@@ -39,6 +45,12 @@ function cleanupViewer() {
   }
   if (bimContainer) bimContainer.classList.add('hidden');
 
+  // Limpiar visor 3D (GLB)
+  if (viewer3DInstance) {
+    viewer3DInstance.dispose();
+    viewer3DInstance = null;
+  }
+
   // Restablecer pestañas (si existen)
   if (tabIframe) {
     tabIframe.classList.remove('hidden', 'bg-blue-50', 'text-blue-700', 'active');
@@ -50,6 +62,14 @@ function cleanupViewer() {
 
   // Limpiar mensaje
   if (mensajeEl) mensajeEl.classList.remove('hidden');
+
+  // Limpiar contenido inyectado (img, tablas Excel, contenedores 3D)
+  const directImg = document.getElementById('visor-img-direct');
+  if (directImg) directImg.remove();
+  const excelContainer = document.getElementById('visor-excel-container');
+  if (excelContainer) excelContainer.remove();
+  const glbContainer = document.getElementById('visor-glb-container');
+  if (glbContainer) glbContainer.remove();
 
   // Limpiar estado global
   state.currentFileViewing = null;
@@ -121,6 +141,92 @@ async function initBimViewer(fileUrl) {
   bimContainer.classList.remove('hidden');
 }
 
+// ✅ Renderizar Excel/CSV con SheetJS
+async function renderExcelViewer(fileUrl, fileName) {
+  const iframeEl = document.getElementById('visor-iframe');
+  const msgEl = document.getElementById('visor-mensaje');
+
+  if (iframeEl) iframeEl.style.display = 'none';
+  if (msgEl) msgEl.classList.add('hidden');
+
+  try {
+    const response = await fetch(fileUrl);
+    const arrayBuffer = await response.arrayBuffer();
+
+    // Detectar si es CSV por la extensión
+    const isCSV = fileName.toLowerCase().endsWith('.csv');
+    let workbook;
+    if (isCSV) {
+      const text = new TextDecoder('utf-8').decode(arrayBuffer);
+      workbook = XLSX.read(text, { type: 'string' });
+    } else {
+      workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    }
+
+    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+    const htmlTable = XLSX.utils.sheet_to_html(firstSheet, { id: 'excel-table-visor' });
+
+    // Crear contenedor scrollable para la tabla
+    const container = document.createElement('div');
+    container.id = 'visor-excel-container';
+    container.style.cssText = `
+      width:100%;height:100%;overflow:auto;background:var(--midnight-mid);padding:12px;
+      font-family:'Inter',sans-serif;
+    `;
+    container.innerHTML = `
+      <style>
+        #excel-table-visor {
+          border-collapse: collapse;
+          width: 100%;
+          font-size: 0.78rem;
+          color: var(--text-primary);
+        }
+        #excel-table-visor th,
+        #excel-table-visor td {
+          border: 1px solid var(--border-subtle);
+          padding: 6px 10px;
+          text-align: left;
+          white-space: nowrap;
+        }
+        #excel-table-visor th,
+        #excel-table-visor tr:first-child td {
+          background: var(--cyan-dim);
+          color: var(--cyan);
+          font-weight: 700;
+          text-transform: uppercase;
+          font-size: 0.7rem;
+          letter-spacing: 0.04em;
+          position: sticky;
+          top: 0;
+          z-index: 1;
+        }
+        #excel-table-visor tr:nth-child(even) {
+          background: rgba(255,255,255,0.03);
+        }
+        #excel-table-visor tr:hover {
+          background: var(--surface-hover);
+        }
+      </style>
+      ${htmlTable}
+    `;
+
+    // Insertar en el visor body
+    const visorBody = document.querySelector('.visor-body');
+    if (visorBody) visorBody.appendChild(container);
+
+  } catch (error) {
+    console.error('Error renderizando Excel/CSV:', error);
+    if (msgEl) {
+      msgEl.classList.remove('hidden');
+      msgEl.innerHTML = `
+        <i class="ph ph-warning" style="font-size:4rem;margin-bottom:1rem;color:var(--amber);"></i>
+        <h4 style="font-size:1.2rem;font-weight:700;">Error al cargar la hoja de cálculo</h4>
+        <p style="max-width:24rem;">No se pudo renderizar este archivo. Usa el botón "Descargar" para obtener el original.</p>
+      `;
+    }
+  }
+}
+
 // ✅ Función principal para abrir cualquier tipo de archivo
 export async function openViewer(file) {
   state.currentFileViewing = file;
@@ -169,13 +275,59 @@ export async function openViewer(file) {
       if (msgEl) msgEl.classList.add('hidden');
       break;
     case 'excel':
+    case 'csv':
       iconEl.className = 'ph-fill ph-file-xls';
       iconEl.style.cssText = 'font-size:1.5rem;color:var(--green);';
-      if (iframeEl) {
-        iframeEl.src = `https://docs.google.com/viewer?url=${encodeURIComponent(file.url)}&embedded=true`;
-        iframeEl.style.display = 'block';
-      }
+      // Render with SheetJS instead of Google Docs iframe
+      renderExcelViewer(file.url, file.nombre);
+      break;
+    case 'glb':
+      iconEl.className = 'ph-fill ph-cube';
+      iconEl.style.cssText = 'font-size:1.5rem;color:var(--cyan);';
+      if (iframeEl) iframeEl.style.display = 'none';
       if (msgEl) msgEl.classList.add('hidden');
+
+      // Create a 3D container inside visor-body
+      const visorBody = document.querySelector('.visor-body');
+      if (visorBody) {
+        const glbContainer = document.createElement('div');
+        glbContainer.id = 'visor-glb-container';
+        glbContainer.style.cssText = 'width:100%;height:100%;background:var(--midnight-mid);';
+        visorBody.appendChild(glbContainer);
+
+        try {
+          viewer3DInstance = await init3DViewer({
+            container: glbContainer,
+            url: file.url,
+            onLoaded: () => {
+              console.log('✅ Modelo 3D cargado exitosamente');
+            },
+            onError: (err) => {
+              console.error('❌ Error cargando modelo 3D:', err);
+              glbContainer.innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
+                  <i class="ph ph-warning" style="font-size:3rem;margin-bottom:1rem;color:var(--amber);"></i>
+                  <h4 style="font-size:1rem;font-weight:700;">Error al cargar el modelo 3D</h4>
+                  <p style="font-size:0.82rem;max-width:20rem;text-align:center;">${err.userMessage || 'No se pudo renderizar el modelo. Usa "Descargar" para obtenerlo.'}</p>
+                </div>`;
+            },
+            onStart: () => {
+              glbContainer.innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
+                  <div class="loading-spinner"></div>
+                  <p style="margin-top:1rem;font-size:0.82rem;">Cargando modelo 3D...</p>
+                </div>`;
+            }
+          });
+        } catch (err) {
+          console.error('❌ Error inicializando visor 3D:', err);
+          glbContainer.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
+              <i class="ph ph-warning" style="font-size:3rem;margin-bottom:1rem;color:var(--amber);"></i>
+              <p style="font-size:0.82rem;">${err.userMessage || 'Error al inicializar el visor 3D.'}</p>
+            </div>`;
+        }
+      }
       break;
     default:
       iconEl.className = 'ph-fill ph-file';
@@ -192,9 +344,6 @@ export function setupVisorButtons() {
     cerrarBtn.addEventListener('click', () => {
       visorModal.classList.remove('activo');
       cleanupViewer();
-      // Remove any injected images
-      const directImg = document.getElementById('visor-img-direct');
-      if (directImg) directImg.remove();
     });
   }
 
@@ -204,20 +353,52 @@ export function setupVisorButtons() {
       if (e.target === visorModal) {
         visorModal.classList.remove('activo');
         cleanupViewer();
-        const directImg = document.getElementById('visor-img-direct');
-        if (directImg) directImg.remove();
       }
     });
   }
 
-  // Botón eliminar archivo (solo para admins)
+  // Botón eliminar archivo (solo para admins) — Lógica REAL de eliminación
   const eliminarBtn = document.getElementById('visor-btn-eliminar');
   if (eliminarBtn) {
-    eliminarBtn.addEventListener('click', () => {
-      if (confirm('¿Estás seguro de eliminar este archivo? Esta acción no se puede deshacer.')) {
-        emit(EVENTS.FILE_DELETED, state.currentFileViewing);
+    eliminarBtn.addEventListener('click', async () => {
+      const file = state.currentFileViewing;
+      if (!file) return;
+
+      if (!confirm('¿Estás seguro de eliminar este archivo? Esta acción no se puede deshacer.')) {
+        return;
+      }
+
+      // Disable button during deletion
+      eliminarBtn.disabled = true;
+      eliminarBtn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Eliminando...';
+
+      try {
+        // 1. Delete from Firebase Storage
+        if (file.storagePath) {
+          const fileRef = storageRef(storage, file.storagePath);
+          await deleteObject(fileRef);
+        }
+
+        // 2. Delete Firestore document
+        if (file.id) {
+          const docRef = doc(db, dbPath, file.id);
+          await deleteDoc(docRef);
+        }
+
+        // 3. Emit event for any listeners
+        emit(EVENTS.FILE_DELETED, file);
+
+        // 4. Close visor — Firestore onSnapshot will auto-refresh the file list
         visorModal.classList.remove('activo');
         cleanupViewer();
+
+        console.log('✅ Archivo eliminado exitosamente:', file.nombre);
+      } catch (error) {
+        console.error('❌ Error eliminando archivo:', error);
+        alert('Error al eliminar el archivo: ' + error.message);
+      } finally {
+        eliminarBtn.disabled = false;
+        eliminarBtn.innerHTML = '<i class="ph ph-trash"></i> Eliminar';
       }
     });
   }
@@ -225,4 +406,3 @@ export function setupVisorButtons() {
 
 // Función global para integraciones externas
 window.openGeovisorViewer = openViewer;
-

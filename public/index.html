@@ -37,15 +37,26 @@
     <!-- Tailwind (minimal, for utility helpers) -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- SheetJS for Excel/CSV rendering -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
     <link rel="stylesheet" href="css/styles.css">
 </head>
 
 <body>
 
     <!-- ═══════════════════════════════════════════════════════
+         LOADING SCREEN — Shown while Firebase verifies session
+         ═══════════════════════════════════════════════════════ -->
+    <div id="loading-screen">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Verificando sesión...</p>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
          LOGIN SCREEN — Glassmorphism Split
          ═══════════════════════════════════════════════════════ -->
-    <div id="auth-screen">
+    <div id="auth-screen" class="hidden-auth">
         <div class="login-card">
             <!-- VISITOR SIDE -->
             <div class="login-side login-side-visitor">
