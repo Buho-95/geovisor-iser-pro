@@ -536,6 +536,15 @@ class FileManager {
       const meta = iconMap[archivo.tipo] || { icon: 'ph-file', color: 'var(--text-muted)' };
       const fileJson = encodeURIComponent(JSON.stringify(archivo));
       const size = this.formatFileSize(archivo.tamaño || 0);
+      const isAdmin = state.userRole === 'admin';
+      const deleteBtn = isAdmin ? `
+              <button data-delete-file="${fileJson}" style="
+                padding:4px;font-size:0.9rem;background:none;border:none;
+                color:var(--text-muted);cursor:pointer;" title="Eliminar"
+                onmouseover="this.style.color='var(--danger)';"
+                onmouseout="this.style.color='var(--text-muted)';">
+                <i class="ph ph-trash"></i>
+              </button>` : '';
       html += `
         <li style="margin-bottom:4px;">
           <div data-open-viewer="${fileJson}" style="
@@ -549,7 +558,7 @@ class FileManager {
               <i class="ph-fill ${meta.icon}" style="color:${meta.color};font-size:1.1rem;flex-shrink:0;"></i>
               <span style="font-size:0.78rem;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${archivo.nombre}</span>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
               <span style="font-size:0.65rem;color:var(--text-muted);">${size}</span>
               <button data-doc-download="${fileJson}" style="
                 padding:4px;font-size:0.9rem;background:none;border:none;
@@ -557,7 +566,7 @@ class FileManager {
                 onmouseover="this.style.color='var(--cyan)';"
                 onmouseout="this.style.color='var(--text-secondary)';">
                 <i class="ph ph-cloud-arrow-down"></i>
-              </button>
+              </button>${deleteBtn}
             </div>
           </div>
         </li>`;

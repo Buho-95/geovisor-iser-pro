@@ -232,7 +232,19 @@ export async function openViewer(file) {
   state.currentFileViewing = file;
   document.getElementById('visor-titulo').innerText = file.nombre;
   document.getElementById('visor-btn-descargar').href = file.url;
-  document.getElementById('visor-tipo-label').textContent = (file.tipo || 'doc').toUpperCase();
+
+  // Fallback type detection from file extension (for files uploaded before type detection)
+  let fileType = file.tipo || 'otro';
+  if (fileType === 'otro' && file.nombre) {
+    const name = file.nombre.toLowerCase();
+    if (name.endsWith('.glb') || name.endsWith('.gltf')) fileType = 'glb';
+    else if (name.endsWith('.xlsx') || name.endsWith('.xls')) fileType = 'excel';
+    else if (name.endsWith('.csv')) fileType = 'csv';
+    else if (name.endsWith('.pdf')) fileType = 'pdf';
+    else if (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') || name.endsWith('.gif')) fileType = 'img';
+  }
+
+  document.getElementById('visor-tipo-label').textContent = fileType.toUpperCase();
 
   // Show/hide delete button based on role
   const deleteBtn = document.getElementById('visor-btn-eliminar');
@@ -253,7 +265,7 @@ export async function openViewer(file) {
   const iframeEl = document.getElementById('visor-iframe');
   const msgEl = document.getElementById('visor-mensaje');
 
-  switch (file.tipo) {
+  switch (fileType) {
     case 'pdf':
       iconEl.className = 'ph-fill ph-file-pdf';
       iconEl.style.cssText = 'font-size:1.5rem;color:var(--pink);';
@@ -293,9 +305,18 @@ export async function openViewer(file) {
         const glbContainer = document.createElement('div');
         glbContainer.id = 'visor-glb-container';
         glbContainer.style.cssText = 'width:100%;height:100%;background:var(--midnight-mid);';
+        
+        // Show loading spinner BEFORE init3DViewer (it will clear this when ready)
+        glbContainer.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
+            <div class="loading-spinner"></div>
+            <p style="margin-top:1rem;font-size:0.82rem;">Cargando modelo 3D...</p>
+          </div>`;
         visorBody.appendChild(glbContainer);
 
         try {
+          // NOTE: Do NOT use onStart — init3DViewer clears container.innerHTML
+          // and appends the WebGL canvas. An onStart that sets innerHTML would destroy it.
           viewer3DInstance = await init3DViewer({
             container: glbContainer,
             url: file.url,
@@ -309,13 +330,6 @@ export async function openViewer(file) {
                   <i class="ph ph-warning" style="font-size:3rem;margin-bottom:1rem;color:var(--amber);"></i>
                   <h4 style="font-size:1rem;font-weight:700;">Error al cargar el modelo 3D</h4>
                   <p style="font-size:0.82rem;max-width:20rem;text-align:center;">${err.userMessage || 'No se pudo renderizar el modelo. Usa "Descargar" para obtenerlo.'}</p>
-                </div>`;
-            },
-            onStart: () => {
-              glbContainer.innerHTML = `
-                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
-                  <div class="loading-spinner"></div>
-                  <p style="margin-top:1rem;font-size:0.82rem;">Cargando modelo 3D...</p>
                 </div>`;
             }
           });

@@ -18,6 +18,7 @@ import {
   showBlockView,
   generarArbolDirectorios,
   setupViewerDelegation,
+  setupDeleteDelegation,
   openBlockEditModal,
   closeBlockEditModal,
   saveBlockInfo
@@ -110,7 +111,10 @@ export async function bootstrap() {
   document.getElementById('btn-volver')?.addEventListener('click', doInitGlobalView);
 
   const arbolContainer = document.getElementById('arbol-carpetas-iser');
-  if (arbolContainer) setupViewerDelegation(arbolContainer, openViewer);
+  if (arbolContainer) {
+    setupViewerDelegation(arbolContainer, openViewer);
+    setupDeleteDelegation(arbolContainer);
+  }
 
   setupVisorButtons();
   setupUpload();

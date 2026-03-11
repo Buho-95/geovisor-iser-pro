@@ -1043,6 +1043,7 @@ export function generarArbolDirectorios(archivos, containerEl) {
       console.error('Error cargando visor:', err);
     });
   });
+  setupDeleteDelegation(arbolContainer);
 }
 
 /**
@@ -1222,6 +1223,7 @@ function setupSearchAndFilters(archivos) {
         console.error('Error cargando visor:', err);
       });
     });
+    setupDeleteDelegation(filesTree);
   }
 
   /**
@@ -1256,6 +1258,7 @@ function setupSearchAndFilters(archivos) {
         console.error('Error cargando visor:', err);
       });
     });
+    setupDeleteDelegation(filesGrid);
   }
 }
 
@@ -1459,6 +1462,7 @@ function handleSubcarpetaSeleccionada(event) {
           import('./visor.js').then(({ openViewer }) => openViewer(file))
             .catch(err => console.error('Error cargando visor:', err));
         });
+        setupDeleteDelegation(inSituContainer);
       }, 50);
     } else {
       listContainer.innerHTML = '<div class="text-sm text-red-500 p-2">Error: FileManager no disponible</div>';
@@ -1590,6 +1594,9 @@ export function saveBlockInfo(formData) {
  */
 export function setupViewerDelegation(container, openViewer) {
   container.addEventListener('click', (e) => {
+    // Don't open viewer if user clicked delete or download buttons
+    if (e.target.closest('[data-delete-file]') || e.target.closest('[data-doc-download]')) return;
+
     const cell = e.target.closest('[data-open-viewer]');
     if (!cell) return;
     const fileJson = cell.getAttribute('data-open-viewer');
@@ -1600,6 +1607,76 @@ export function setupViewerDelegation(container, openViewer) {
       } catch (err) {
         console.error('Error abriendo visor:', err);
       }
+    }
+  });
+}
+
+/**
+ * Delegación de clics para eliminar archivos desde la lista de BD.
+ * Usa Firebase Storage deleteObject + Firestore deleteDoc.
+ * @param {HTMLElement} container - Contenedor del árbol
+ */
+export function setupDeleteDelegation(container) {
+  container.addEventListener('click', async (e) => {
+    const deleteBtn = e.target.closest('[data-delete-file]');
+    if (!deleteBtn) return;
+
+    // Prevent the click from bubbling to data-open-viewer
+    e.stopPropagation();
+    e.preventDefault();
+
+    const fileJson = deleteBtn.getAttribute('data-delete-file');
+    if (!fileJson) return;
+
+    let file;
+    try {
+      file = JSON.parse(decodeURIComponent(fileJson));
+    } catch (err) {
+      console.error('Error parsing file data:', err);
+      return;
+    }
+
+    if (!confirm(`¿Estás seguro de eliminar "${file.nombre}"? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    // Disable button during deletion
+    deleteBtn.disabled = true;
+    deleteBtn.style.opacity = '0.3';
+
+    try {
+      // Dynamic import to avoid circular dependencies
+      const { ref, deleteObject } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js");
+      const { doc, deleteDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+      const { storage, db } = await import('./services/firebase.js');
+      const { dbPath } = await import('./core/config.js');
+
+      // 1. Delete from Firebase Storage
+      if (file.storagePath) {
+        const fileRef = ref(storage, file.storagePath);
+        await deleteObject(fileRef);
+      }
+
+      // 2. Delete Firestore document
+      if (file.id) {
+        const docRef = doc(db, dbPath, file.id);
+        await deleteDoc(docRef);
+      }
+
+      // 3. Firestore onSnapshot will auto-refresh the file list
+      console.log('✅ Archivo eliminado desde BD:', file.nombre);
+
+      // Show notification
+      const fileManager = window.getFileManager?.();
+      if (fileManager) {
+        fileManager.showNotification(`"${file.nombre}" eliminado exitosamente`, 'success');
+      }
+
+    } catch (error) {
+      console.error('❌ Error eliminando archivo:', error);
+      alert('Error al eliminar el archivo: ' + error.message);
+      deleteBtn.disabled = false;
+      deleteBtn.style.opacity = '1';
     }
   });
 }
