@@ -1,7 +1,7 @@
 /**
  * Servicio de autenticación. Firebase Auth + Modo Visitante.
  */
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { auth, db } from './firebase.js';
 import { state, setUser } from '../core/state.js';
@@ -10,8 +10,8 @@ import { COLLECTIONS } from '../core/config.js';
 export function initAuth(callbacks = {}) {
   const { onLoginSuccess, onAuthChange } = callbacks;
 
-  // Persistencia Local — mantiene sesión de Admin tras F5
-  setPersistence(auth, browserLocalPersistence).catch(console.error);
+  // Persistencia de SESIÓN — al cerrar navegador/pestaña, la sesión expira
+  setPersistence(auth, browserSessionPersistence).catch(console.error);
 
   const form = document.getElementById('login-form');
   const btnVisitor = document.getElementById('btn-visitor');

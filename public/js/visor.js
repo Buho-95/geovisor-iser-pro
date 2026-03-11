@@ -351,6 +351,43 @@ export async function openViewer(file) {
   }
 }
 
+// ✅ Custom Glassmorphism confirm modal (replaces native confirm())
+export function showConfirmDelete(fileName) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('confirm-delete-modal');
+    const filenameEl = document.getElementById('confirm-delete-filename');
+    const btnOk = document.getElementById('confirm-delete-ok');
+    const btnCancel = document.getElementById('confirm-delete-cancel');
+
+    if (!modal || !btnOk || !btnCancel) {
+      // Fallback to native if modal not found
+      resolve(confirm('¿Está seguro de eliminar este archivo? Esta acción no se puede deshacer.'));
+      return;
+    }
+
+    if (filenameEl) filenameEl.textContent = fileName || '';
+
+    modal.classList.add('activo');
+
+    function cleanup() {
+      modal.classList.remove('activo');
+      btnOk.removeEventListener('click', onOk);
+      btnCancel.removeEventListener('click', onCancel);
+      modal.removeEventListener('click', onBackdrop);
+    }
+
+    function onOk() { cleanup(); resolve(true); }
+    function onCancel() { cleanup(); resolve(false); }
+    function onBackdrop(e) {
+      if (e.target === modal) { cleanup(); resolve(false); }
+    }
+
+    btnOk.addEventListener('click', onOk);
+    btnCancel.addEventListener('click', onCancel);
+    modal.addEventListener('click', onBackdrop);
+  });
+}
+
 // ✅ Configurar botones del visor predeterminados
 export function setupVisorButtons() {
   const cerrarBtn = document.getElementById('btn-cerrar-visor');
@@ -378,9 +415,8 @@ export function setupVisorButtons() {
       const file = state.currentFileViewing;
       if (!file) return;
 
-      if (!confirm('¿Estás seguro de eliminar este archivo? Esta acción no se puede deshacer.')) {
-        return;
-      }
+      const confirmed = await showConfirmDelete(file.nombre);
+      if (!confirmed) return;
 
       // Disable button during deletion
       eliminarBtn.disabled = true;

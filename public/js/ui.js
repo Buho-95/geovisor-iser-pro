@@ -1636,9 +1636,9 @@ export function setupDeleteDelegation(container) {
       return;
     }
 
-    if (!confirm(`¿Estás seguro de eliminar "${file.nombre}"? Esta acción no se puede deshacer.`)) {
-      return;
-    }
+    const { showConfirmDelete } = await import('./visor.js');
+    const confirmed = await showConfirmDelete(file.nombre);
+    if (!confirmed) return;
 
     // Disable button during deletion
     deleteBtn.disabled = true;
