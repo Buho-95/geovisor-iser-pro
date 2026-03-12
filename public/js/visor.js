@@ -12,6 +12,10 @@ let bimViewerInstance = null;
 let viewer3DInstance = null;
 let currentViewerType = null;
 
+// ─── Navigation state ───
+let visorFileList = [];
+let visorFileIndex = -1;
+
 // 🎯 Elementos del DOM del visor
 const visorModal = document.getElementById('visor-modal');
 const visorIframe = document.getElementById('visor-iframe');
@@ -25,6 +29,11 @@ const viewerControls = document.getElementById('viewer-controls');
 const viewerReset = document.getElementById('viewer-reset');
 const viewerZoomIn = document.getElementById('viewer-zoom-in');
 const viewerZoomOut = document.getElementById('viewer-zoom-out');
+
+// Navigation arrow elements
+const navPrev = document.getElementById('visor-nav-prev');
+const navNext = document.getElementById('visor-nav-next');
+const navCounter = document.getElementById('visor-nav-counter');
 
 // ✅ Limpieza completa de memoria al cerrar el visor
 function cleanupViewer() {
@@ -227,6 +236,56 @@ async function renderExcelViewer(fileUrl, fileName) {
   }
 }
 
+// ─── Navigation helpers ───
+function updateNavUI() {
+  const hasMultiple = visorFileList.length > 1;
+
+  if (navPrev) {
+    if (hasMultiple) {
+      navPrev.classList.remove('hidden');
+      navPrev.disabled = visorFileIndex <= 0;
+    } else {
+      navPrev.classList.add('hidden');
+    }
+  }
+
+  if (navNext) {
+    if (hasMultiple) {
+      navNext.classList.remove('hidden');
+      navNext.disabled = visorFileIndex >= visorFileList.length - 1;
+    } else {
+      navNext.classList.add('hidden');
+    }
+  }
+
+  if (navCounter) {
+    if (hasMultiple) {
+      navCounter.classList.remove('hidden');
+      navCounter.textContent = `${visorFileIndex + 1} / ${visorFileList.length}`;
+    } else {
+      navCounter.classList.add('hidden');
+    }
+  }
+}
+
+function navigateVisor(direction) {
+  const newIndex = visorFileIndex + direction;
+  if (newIndex < 0 || newIndex >= visorFileList.length) return;
+  visorFileIndex = newIndex;
+  const file = visorFileList[visorFileIndex];
+  if (file) openViewer(file);
+}
+
+/**
+ * Set the file list context for navigation arrows.
+ * Call this BEFORE openViewer when you have sibling files available.
+ * @param {Array} fileList - Array of file objects
+ */
+export function setVisorFileList(fileList) {
+  visorFileList = Array.isArray(fileList) ? fileList : [];
+  visorFileIndex = -1;
+}
+
 // ✅ Función principal para abrir cualquier tipo de archivo
 export async function openViewer(file) {
   state.currentFileViewing = file;
@@ -259,6 +318,16 @@ export async function openViewer(file) {
   // Restablecer estado inicial
   cleanupViewer();
   visorModal.classList.add('activo');
+
+  // ─── Compute navigation index ───
+  if (visorFileList.length > 0) {
+    const idx = visorFileList.findIndex(f =>
+      (f.id && f.id === file.id) ||
+      (f.nombre === file.nombre && f.url === file.url)
+    );
+    visorFileIndex = idx >= 0 ? idx : -1;
+  }
+  updateNavUI();
 
   // Configurar icono por tipo de archivo
   const iconEl = document.getElementById('visor-icono');
@@ -311,6 +380,7 @@ export async function openViewer(file) {
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
             <div class="loading-spinner"></div>
             <p style="margin-top:1rem;font-size:0.82rem;">Cargando modelo 3D...</p>
+            <p id="visor-3d-progress" style="font-size:0.72rem;color:var(--cyan);margin-top:4px;"></p>
           </div>`;
         visorBody.appendChild(glbContainer);
 
@@ -322,6 +392,10 @@ export async function openViewer(file) {
             url: file.url,
             onLoaded: () => {
               console.log('✅ Modelo 3D cargado exitosamente');
+            },
+            onProgress: (pct) => {
+              const progressEl = document.getElementById('visor-3d-progress');
+              if (progressEl) progressEl.textContent = `${pct}%`;
             },
             onError: (err) => {
               console.error('❌ Error cargando modelo 3D:', err);
@@ -395,6 +469,10 @@ export function setupVisorButtons() {
     cerrarBtn.addEventListener('click', () => {
       visorModal.classList.remove('activo');
       cleanupViewer();
+      // Reset navigation state on close
+      visorFileList = [];
+      visorFileIndex = -1;
+      updateNavUI();
     });
   }
 
@@ -404,9 +482,40 @@ export function setupVisorButtons() {
       if (e.target === visorModal) {
         visorModal.classList.remove('activo');
         cleanupViewer();
+        visorFileList = [];
+        visorFileIndex = -1;
+        updateNavUI();
       }
     });
   }
+
+  // ─── Navigation arrows ───
+  if (navPrev) {
+    navPrev.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigateVisor(-1);
+    });
+  }
+  if (navNext) {
+    navNext.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigateVisor(1);
+    });
+  }
+
+  // Keyboard navigation: left/right arrows
+  document.addEventListener('keydown', (e) => {
+    if (!visorModal?.classList.contains('activo')) return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); navigateVisor(-1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); navigateVisor(1); }
+    if (e.key === 'Escape') {
+      visorModal.classList.remove('activo');
+      cleanupViewer();
+      visorFileList = [];
+      visorFileIndex = -1;
+      updateNavUI();
+    }
+  });
 
   // Botón eliminar archivo (solo para admins) — Lógica REAL de eliminación
   const eliminarBtn = document.getElementById('visor-btn-eliminar');

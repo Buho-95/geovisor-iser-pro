@@ -1589,10 +1589,12 @@ export function saveBlockInfo(formData) {
 
 /**
  * Delegación de clics en el árbol para abrir el visor.
+ * Automatically collects sibling files for navigation arrow support.
  * @param {HTMLElement} container - Contenedor del árbol (arbol-carpetas-iser)
  * @param {function(object): void} openViewer - Recibe el objeto archivo
+ * @param {function(Array): void} [setFileList] - Optional: sets the file list for navigation arrows
  */
-export function setupViewerDelegation(container, openViewer) {
+export function setupViewerDelegation(container, openViewer, setFileList) {
   container.addEventListener('click', (e) => {
     // Don't open viewer if user clicked delete or download buttons
     if (e.target.closest('[data-delete-file]') || e.target.closest('[data-doc-download]')) return;
@@ -1603,6 +1605,27 @@ export function setupViewerDelegation(container, openViewer) {
     if (fileJson) {
       try {
         const file = JSON.parse(decodeURIComponent(fileJson));
+
+        // Collect all sibling files from the same container for navigation
+        const allCells = container.querySelectorAll('[data-open-viewer]');
+        const siblingFiles = [];
+        allCells.forEach(c => {
+          try {
+            const raw = c.getAttribute('data-open-viewer');
+            if (raw) siblingFiles.push(JSON.parse(decodeURIComponent(raw)));
+          } catch { /* skip malformed */ }
+        });
+
+        // Set file list context for navigation arrows (sync if available)
+        if (setFileList) {
+          setFileList(siblingFiles);
+        } else {
+          // Fallback: async import (may race, but best-effort)
+          import('./visor.js').then(({ setVisorFileList }) => {
+            if (setVisorFileList) setVisorFileList(siblingFiles);
+          }).catch(() => { /* noop */ });
+        }
+
         openViewer(file);
       } catch (err) {
         console.error('Error abriendo visor:', err);

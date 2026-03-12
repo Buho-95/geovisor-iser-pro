@@ -23,7 +23,7 @@ import {
   closeBlockEditModal,
   saveBlockInfo
 } from './ui.js';
-import { openViewer, setupVisorButtons } from './visor.js';
+import { openViewer, setupVisorButtons, setVisorFileList } from './visor.js';
 import { setupUpload } from './upload.js';
 import { initFileManager, getFileManager } from './file-manager.js';
 import { estructuraPlanimetriaISER } from './planoteca-structure.js';
@@ -112,7 +112,7 @@ export async function bootstrap() {
 
   const arbolContainer = document.getElementById('arbol-carpetas-iser');
   if (arbolContainer) {
-    setupViewerDelegation(arbolContainer, openViewer);
+    setupViewerDelegation(arbolContainer, openViewer, setVisorFileList);
     setupDeleteDelegation(arbolContainer);
   }
 

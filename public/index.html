@@ -25,8 +25,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+          "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
         }
       }
     </script>
@@ -375,6 +375,15 @@
                     <p style="max-width:24rem;">Este archivo requiere software de escritorio (AutoCAD, Revit, Excel).
                         Usa el botón "Descargar" para obtener el original.</p>
                 </div>
+                <!-- Navigation Arrows -->
+                <button id="visor-nav-prev" class="visor-nav-arrow visor-nav-prev hidden" title="Anterior">
+                    <i class="ph ph-caret-left"></i>
+                </button>
+                <button id="visor-nav-next" class="visor-nav-arrow visor-nav-next hidden" title="Siguiente">
+                    <i class="ph ph-caret-right"></i>
+                </button>
+                <!-- File counter badge -->
+                <div id="visor-nav-counter" class="visor-nav-counter hidden"></div>
             </div>
         </div>
     </div>

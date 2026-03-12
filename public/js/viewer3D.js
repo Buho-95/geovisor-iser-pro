@@ -1,6 +1,8 @@
 let THREE_NS = null;
 let GLTFLoaderCls = null;
 let OrbitControlsCls = null;
+let DRACOLoaderCls = null;
+let MeshoptDecoderMod = null;
 
 function detectBlockedByClient(err) {
   const msg = String(err?.message || err || '');
@@ -23,9 +25,13 @@ async function loadDeps() {
     const threeMod = await import('three');
     const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
     const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+    const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
+    const { MeshoptDecoder } = await import('three/addons/libs/meshopt_decoder.module.js');
     THREE_NS = threeMod;
     GLTFLoaderCls = GLTFLoader;
     OrbitControlsCls = OrbitControls;
+    DRACOLoaderCls = DRACOLoader;
+    MeshoptDecoderMod = MeshoptDecoder;
   } catch (e) {
     throw normalizeError(e);
   }
@@ -67,14 +73,24 @@ function fitCameraToObject(THREE, camera, controls, object, margin = 1.25) {
 
   camera.position.set(center.x + cameraZ, center.y + cameraZ * 0.35, center.z + cameraZ);
   camera.near = maxDim / 100;
-  camera.far = maxDim * 100;
+  camera.far = maxDim * 200;
   camera.updateProjectionMatrix();
 
   controls.target.copy(center);
   controls.update();
 }
 
-export async function init3DViewer({ container, url, onLoaded, onError, onStart }) {
+/**
+ * High-performance 3D viewer with DRACO & Meshopt decoder support.
+ * @param {Object} opts
+ * @param {HTMLElement} opts.container
+ * @param {string} opts.url
+ * @param {function} [opts.onLoaded]
+ * @param {function} [opts.onError]
+ * @param {function} [opts.onStart]
+ * @param {function} [opts.onProgress] - (percent: number) => void, 0-100
+ */
+export async function init3DViewer({ container, url, onLoaded, onError, onStart, onProgress }) {
   if (!container) throw new Error('3D container missing');
   try {
     await loadDeps();
@@ -86,21 +102,27 @@ export async function init3DViewer({ container, url, onLoaded, onError, onStart 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(0x000000, 0);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 50000);
 
   const ambient = new THREE.AmbientLight(0xffffff, 0.75);
   scene.add(ambient);
   const dir = new THREE.DirectionalLight(0xffffff, 1.1);
   dir.position.set(10, 16, 12);
   scene.add(dir);
+  const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+  fillLight.position.set(-8, 4, -10);
+  scene.add(fillLight);
 
   const controls = new OrbitControlsCls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.screenSpacePanning = false;
-  controls.minDistance = 0.05;
+  controls.minDistance = 0.01;
 
   container.innerHTML = '';
   container.appendChild(renderer.domElement);
@@ -122,7 +144,22 @@ export async function init3DViewer({ container, url, onLoaded, onError, onStart 
   ro.observe(container);
   resize();
 
+  // ── DRACO + Meshopt decoders ──
   const loader = new GLTFLoaderCls();
+
+  if (DRACOLoaderCls) {
+    const dracoLoader = new DRACOLoaderCls();
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+    dracoLoader.setDecoderConfig({ type: 'js' });
+    dracoLoader.preload();
+    loader.setDRACOLoader(dracoLoader);
+  }
+
+  if (MeshoptDecoderMod) {
+    try {
+      loader.setMeshoptDecoder(MeshoptDecoderMod);
+    } catch { /* noop — may not be supported in all Three.js versions */ }
+  }
 
   try {
     loader.setCrossOrigin?.('anonymous');
@@ -161,8 +198,12 @@ export async function init3DViewer({ container, url, onLoaded, onError, onStart 
         try { onLoaded?.(); } catch { /* noop */ }
         animate();
       },
-      () => {
+      (xhr) => {
         safeStart();
+        if (xhr.lengthComputable && onProgress) {
+          const pct = Math.round((xhr.loaded / xhr.total) * 100);
+          try { onProgress(pct); } catch { /* noop */ }
+        }
       },
       (err) => {
         if (destroyed) return;
