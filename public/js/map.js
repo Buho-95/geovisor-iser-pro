@@ -119,7 +119,7 @@ export function initLeafletMap(onBlockSelect) {
   };
 
   L.control.layers(baseLayers, null, {
-    position: 'topright',
+    position: 'bottomright',
     collapsed: true
   }).addTo(map);
 
