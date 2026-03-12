@@ -1,16 +1,18 @@
 /**
  * Mapa Leaflet: campus ISER, perímetro y bloques.
+ * 🗺️ Multi-sede con GeoJSON diferenciado + selector de mapas base.
  * Emite MAP_READY para plugins (capas SIG).
  */
-import { getCampusData } from './campus-data.js';
+import { getCampusData, getSedeConfig } from './campus-data.js';
 import { emit, EVENTS } from './core/events.js';
+import { state } from './core/state.js';
 
 let map = null;
 let perimetroPolygon = null;
 const mapPolygons = {};
 
-const iserCenter = [7.3719, -72.6455];
-const perimetroCoords = [[7.371003, -72.646601], [7.371118, -72.646402], [7.370813, -72.646159], [7.370791, -72.646131], [7.370874, -72.645977], [7.371062, -72.645297], [7.371254, -72.644596], [7.371564, -72.643950], [7.372066, -72.643161], [7.372669, -72.642252], [7.373628, -72.643181], [7.373147, -72.643978], [7.373362, -72.644271], [7.373871, -72.644822], [7.373482, -72.645198], [7.373208, -72.646014], [7.373087, -72.646295], [7.373085, -72.646324], [7.372502, -72.647164], [7.371686, -72.646522], [7.371246, -72.646612], [7.371164, -72.646733], [7.371003, -72.646601]];
+// Capa de polígonos de la sede actual (para limpieza al cambiar)
+let currentSedeLayerGroup = null;
 
 function formatArea(area) {
   const num = Number(area);
@@ -32,17 +34,19 @@ export function getMapPolygons() {
 
 /**
  * Resalta un bloque en el mapa y centra la vista.
- * @param {string} id - ID del bloque
- * @param {string|null} currentBlockId - ID del bloque actualmente seleccionado (para desresaltar otros)
  */
 export function highlightBlock(id, currentBlockId) {
-  const campusData = getCampusData();
+  const sedeConfig = getSedeConfig(state.currentSede || 'pamplona');
+  const blocks = sedeConfig.blocks || {};
   Object.entries(mapPolygons).forEach(([polyId, poly]) => {
     if (polyId === id) {
       poly.setStyle({ fillOpacity: 0.8, weight: 3, color: '#FFFFFF' });
       if (map) map.flyToBounds(poly.getBounds(), { padding: [40, 40], maxZoom: 20, duration: 0.5 });
     } else {
-      poly.setStyle({ fillOpacity: 0.35, weight: 2, color: campusData[polyId].color });
+      const blockData = blocks[polyId];
+      if (blockData) {
+        poly.setStyle({ fillOpacity: 0.35, weight: 2, color: blockData.color });
+      }
     }
   });
 }
@@ -51,15 +55,18 @@ export function highlightBlock(id, currentBlockId) {
  * Restaura estilos de todos los polígonos al estado por defecto.
  */
 export function resetBlockStyles() {
-  const campusData = getCampusData();
+  const sedeConfig = getSedeConfig(state.currentSede || 'pamplona');
+  const blocks = sedeConfig.blocks || {};
   Object.entries(mapPolygons).forEach(([polyId, poly]) => {
-    poly.setStyle({ fillOpacity: 0.35, weight: 2, color: campusData[polyId].color });
+    const blockData = blocks[polyId];
+    if (blockData) {
+      poly.setStyle({ fillOpacity: 0.35, weight: 2, color: blockData.color });
+    }
   });
 }
 
 /**
  * Inicializa el mapa Leaflet y registra el callback al hacer clic en un bloque.
- * @param {function(string): void} onBlockSelect - Se llama con el id del bloque al hacer clic
  */
 export function initLeafletMap(onBlockSelect) {
   if (typeof L === 'undefined') {
@@ -67,59 +74,170 @@ export function initLeafletMap(onBlockSelect) {
     return;
   }
 
-  const campusData = getCampusData();
-  map = L.map('map', { maxZoom: 22 }).setView(iserCenter, 18);
-  L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+  // ─── Almacenar callback de selección para uso en switchSede ───
+  _onBlockSelectCallback = onBlockSelect;
+
+  const sedeConfig = getSedeConfig('pamplona');
+  map = L.map('map', { maxZoom: 22 }).setView(sedeConfig.center, sedeConfig.zoom);
+
+  // ═══════════════════════════════════════════════════════
+  // 🌐 SELECTOR DE MAPAS BASE (Layers Control)
+  // ═══════════════════════════════════════════════════════
+  const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 22,
+    maxNativeZoom: 19
+  });
+
+  const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri World Imagery',
+    maxZoom: 22,
+    maxNativeZoom: 19
+  });
+
+  const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenTopoMap',
+    maxZoom: 22,
+    maxNativeZoom: 17
+  });
+
+  const googleSatellite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
     attribution: '&copy; Google Maps',
     maxZoom: 22,
     maxNativeZoom: 20
+  });
+
+  // Agregar la capa base por defecto (Google Satélite)
+  googleSatellite.addTo(map);
+
+  // Control de capas base
+  const baseLayers = {
+    '🗺️ Mapa (OSM)': osmLayer,
+    '🛰️ Satélite (Google)': googleSatellite,
+    '🛰️ Satélite (Esri)': satelliteLayer,
+    '🏔️ Topográfico': topoLayer
+  };
+
+  L.control.layers(baseLayers, null, {
+    position: 'topright',
+    collapsed: true
   }).addTo(map);
 
-  perimetroPolygon = L.polygon(perimetroCoords, {
-    color: '#FDE047',
-    weight: 3,
-    dashArray: '10, 8',
-    fillColor: '#FDE047',
-    fillOpacity: 0.05,
-    interactive: false
-  }).addTo(map);
+  // ─── Dibujar sede inicial (Pamplona) ───
+  _drawSede('pamplona', onBlockSelect);
 
-  for (const [id, data] of Object.entries(campusData)) {
-    if (data.coords && data.coords.length > 0) {
-      const polygon = L.polygon(data.coords, {
-        color: data.color,
-        weight: 2,
-        fillColor: data.color,
-        fillOpacity: 0.35
-      }).addTo(map);
+  emit(EVENTS.MAP_READY, map);
+}
 
-      const area = formatArea(data?.info?.area);
-      polygon.bindTooltip(
-        `<div class="text-xs font-semibold">${data.name}</div><div class="text-[11px] opacity-90">Área: ${area} m²</div>`,
-        {
-          direction: 'top',
-          sticky: true,
-          opacity: 0.95,
-          className: 'custom-tooltip'
-        }
+// ═══════════════════════════════════════════════════════
+// 🗺️ SWITCH SEDE — Limpia y redibuja polígonos + flyTo
+// ═══════════════════════════════════════════════════════
+let _onBlockSelectCallback = null;
+
+/**
+ * Cambia la sede visualizada en el mapa.
+ * Limpia polígonos anteriores, dibuja los nuevos, y ejecuta flyTo.
+ * @param {string} sedeId - 'pamplona' | 'rinconada' | 'caldera'
+ */
+export function switchSede(sedeId) {
+  if (!map) return;
+
+  const sedeConfig = getSedeConfig(sedeId);
+
+  // 1. Limpiar polígonos anteriores
+  _clearCurrentSede();
+
+  // 2. Dibujar nueva sede
+  _drawSede(sedeId, _onBlockSelectCallback);
+
+  // 3. 🚁 Vuelo de cámara
+  map.flyTo(sedeConfig.center, sedeConfig.zoom, { duration: 1.5 });
+}
+
+/**
+ * Limpia todos los polígonos y capas de la sede actual.
+ */
+function _clearCurrentSede() {
+  // Limpiar perímetro
+  if (perimetroPolygon) {
+    map.removeLayer(perimetroPolygon);
+    perimetroPolygon = null;
+  }
+
+  // Limpiar bloques
+  Object.keys(mapPolygons).forEach(id => {
+    map.removeLayer(mapPolygons[id]);
+    delete mapPolygons[id];
+  });
+
+  // Limpiar layer group adicional
+  if (currentSedeLayerGroup) {
+    map.removeLayer(currentSedeLayerGroup);
+    currentSedeLayerGroup = null;
+  }
+}
+
+/**
+ * Dibuja los polígonos de una sede en el mapa.
+ */
+function _drawSede(sedeId, onBlockSelect) {
+  const sedeConfig = getSedeConfig(sedeId);
+
+  // ─── Dibujar Perímetro ───
+  if (sedeConfig.perimetro && sedeConfig.perimetro.length > 0) {
+    const pStyle = sedeConfig.perimetroStyle || {
+      color: '#FDE047', weight: 3, dashArray: '10, 8',
+      fillColor: '#FDE047', fillOpacity: 0.05
+    };
+
+    perimetroPolygon = L.polygon(sedeConfig.perimetro, {
+      ...pStyle,
+      interactive: sedeConfig.type === 'perimeter' // Interactivo solo si es tipo perímetro (para tooltip)
+    }).addTo(map);
+
+    // Si es tipo "perimeter" (ej: Rinconada) — solo tooltip, sin clic al visor
+    if (sedeConfig.type === 'perimeter' && sedeConfig.tooltipText) {
+      perimetroPolygon.bindTooltip(
+        `<div class="text-xs font-semibold" style="color:#ff9800;">${sedeConfig.tooltipText}</div>`,
+        { direction: 'center', permanent: false, sticky: true, opacity: 0.95, className: 'custom-tooltip' }
       );
-
-      polygon.on('click', () => onBlockSelect(id));
-      polygon.on('mouseover', function () {
-        this.setStyle({ fillOpacity: 0.7, weight: 3 });
-        this.openTooltip();
-      });
-      polygon.on('mouseout', function () {
-        if (getCurrentBlockId() !== id) this.setStyle({ fillOpacity: 0.35, weight: 2 });
-        this.closeTooltip();
-      });
-      mapPolygons[id] = polygon;
     }
   }
 
-  // tooltips (hover) quedan a cargo de Leaflet (open/closeTooltip) para evitar duplicaciones
+  // ─── Dibujar Bloques ───
+  const blocks = sedeConfig.blocks || {};
+  for (const [id, data] of Object.entries(blocks)) {
+    if (!data.coords || data.coords.length === 0) continue;
 
-  emit(EVENTS.MAP_READY, map);
+    const polygon = L.polygon(data.coords, {
+      color: data.color,
+      weight: 2,
+      fillColor: data.color,
+      fillOpacity: 0.35
+    }).addTo(map);
+
+    const area = formatArea(data?.info?.area);
+    polygon.bindTooltip(
+      `<div class="text-xs font-semibold">${data.name}</div><div class="text-[11px] opacity-90">Área: ${area} m²</div>`,
+      {
+        direction: 'top',
+        sticky: true,
+        opacity: 0.95,
+        className: 'custom-tooltip'
+      }
+    );
+
+    polygon.on('click', () => onBlockSelect?.(id));
+    polygon.on('mouseover', function () {
+      this.setStyle({ fillOpacity: 0.7, weight: 3 });
+      this.openTooltip();
+    });
+    polygon.on('mouseout', function () {
+      if (getCurrentBlockId() !== id) this.setStyle({ fillOpacity: 0.35, weight: 2 });
+      this.closeTooltip();
+    });
+    mapPolygons[id] = polygon;
+  }
 }
 
 // Referencia para mouseout (evitar import circular: map no debe importar state)

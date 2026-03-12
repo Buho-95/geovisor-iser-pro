@@ -11,7 +11,8 @@ import {
   getPerimetroPolygon,
   highlightBlock,
   resetBlockStyles,
-  setGetCurrentBlockId
+  setGetCurrentBlockId,
+  switchSede
 } from './map.js';
 import {
   initGlobalView,
@@ -103,8 +104,13 @@ export async function bootstrap() {
     sedeSelector.addEventListener('change', (e) => {
       const nuevaSede = e.target.value;
       setSede(nuevaSede);
-      console.log(`🏛️ Sede cambiada a: ${nuevaSede} — Listo para cargar datos de nueva sede.`);
-      // TODO: Cargar estructura de carpetas y datos correspondientes a la nueva sede
+      console.log(`🏛️ Sede cambiada a: ${nuevaSede}`);
+
+      // 🗺️ Cambiar vista del mapa con flyTo + polígonos
+      switchSede(nuevaSede);
+
+      // Limpiar panel y volver a vista global
+      doInitGlobalView();
     });
   }
 
