@@ -698,6 +698,7 @@ class DocPreviewModal {
 
   async open(file) {
     if (!this.modalEl || !this.bodyEl || !this.titleEl) return;
+
     this._currentFile = file || null;
     this.titleEl.textContent = file?.nombre || 'Documento';
     this.bodyEl.innerHTML = this._loadingShell();
@@ -847,24 +848,6 @@ class DocPreviewModal {
       if (content) {
         content.classList.add('d-flex', 'align-items-center', 'justify-content-center', 'bg-dark');
         content.appendChild(img);
-      }
-      return;
-    }
-
-    if (tipo === 'video' || ext === 'mp4' || ext === 'webm' || ext === 'ogg') {
-      const video = document.createElement('video');
-      video.controls = true;
-      video.autoplay = true;
-      video.style.width = '100%';
-      video.style.height = '100%';
-      video.style.backgroundColor = 'black';
-      video.style.outline = 'none';
-      video.onloadeddata = () => this._markLoaded();
-      video.src = url;
-      const content = this.bodyEl.querySelector('[data-doc-preview-content]');
-      if (content) {
-        content.classList.add('d-flex', 'align-items-center', 'justify-content-center', 'bg-dark');
-        content.appendChild(video);
       }
       return;
     }

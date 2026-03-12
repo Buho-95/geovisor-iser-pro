@@ -1446,7 +1446,7 @@ body {
 .btn-floating-fullscreen {
   position: absolute;
   top: 1rem;
-  right: 1rem;
+  left: 1rem;
   z-index: 1000;
   background: rgba(11, 18, 32, 0.4);
   backdrop-filter: blur(8px);
@@ -2512,7 +2512,7 @@ body {
 .viewer3d-ctrl-toggle {
   position: absolute;
   top: 10px;
-  left: 10px;
+  right: 10px;
   z-index: 900;
   width: 34px;
   height: 34px;
@@ -2539,7 +2539,7 @@ body {
 .viewer3d-panel {
   position: absolute;
   top: 10px;
-  left: 10px;
+  right: 10px;
   z-index: 900;
   width: 210px;
   padding: 12px 14px;

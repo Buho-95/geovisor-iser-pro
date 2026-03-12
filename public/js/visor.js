@@ -75,6 +75,13 @@ function cleanupViewer() {
   // Limpiar contenido inyectado (img, tablas Excel, contenedores 3D)
   const directImg = document.getElementById('visor-img-direct');
   if (directImg) directImg.remove();
+  const directVideo = document.getElementById('visor-video-direct');
+  if (directVideo) {
+    directVideo.pause();
+    directVideo.removeAttribute('src');
+    directVideo.load();
+    directVideo.remove();
+  }
   const excelContainer = document.getElementById('visor-excel-container');
   if (excelContainer) excelContainer.remove();
   const glbContainer = document.getElementById('visor-glb-container');
