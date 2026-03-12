@@ -5,7 +5,7 @@ import { state } from './core/state.js';
 import { on, EVENTS } from './core/events.js';
 import { getCampusData } from './campus-data.js';
 import { generarMenuPlanoteca } from './planoteca-structure.js';
-import { getPathsForFilter, getFirstFileInPath } from './services/fileMapper.js';
+import { getPathsForFilter, getFirstFileInPath, getFilesInPath } from './services/fileMapper.js';
 
 import { storage } from './services/firebase.js';
 import { ref as storageRef, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
@@ -15,6 +15,12 @@ let blockPreviewWired = false;
 let blockPreviewActiveTab = '3d';
 let blockPreviewLastBlockId = null;
 let _subcarpetaHandler = null;
+
+// ─── Mini-visor navigation state ───
+let miniVisorFiles = [];
+let miniVisorIndex = -1;
+let miniVisorCurrentTab = null;
+let miniVisorCurrentPath = null;
 
 function normalizeKey(s) {
   return String(s || '')
@@ -142,22 +148,29 @@ function pickPreviewBuckets(files) {
   return { models3d, pdfs, images };
 }
 
+// Get the inner content div (preserves arrow buttons which are siblings)
+function getMiniVisorContentEl(container) {
+  return document.getElementById('mini-visor-content') || container;
+}
+
 function renderBlockPreviewMessage(container, title, detail) {
-  container.innerHTML = `
-    <div class="w-100 h-100 d-flex flex-column align-items-center justify-content-center p-3 text-center">
-      <div class="fw-semibold text-secondary">${title || ''}</div>
-      ${detail ? `<div class="small text-muted mt-1">${detail}</div>` : ''}
+  const el = getMiniVisorContentEl(container);
+  el.innerHTML = `
+    <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;text-align:center;">
+      <div style="font-weight:600;color:var(--text-secondary);">${title || ''}</div>
+      ${detail ? `<div style="font-size:0.82rem;color:var(--text-muted);margin-top:4px;">${detail}</div>` : ''}
     </div>
   `.trim();
 }
 
 async function renderBlock3DPreview(container, file) {
   disposeBlock3DPreview();
-  container.innerHTML = `
-    <div class="w-100 h-100 d-flex align-items-center justify-content-center">
-      <div class="text-center">
+  const contentEl = getMiniVisorContentEl(container);
+  contentEl.innerHTML = `
+    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;">
         <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
-        <div class="small text-secondary mt-2">Cargando modelo 3D...</div>
+        <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:8px;">Cargando modelo 3D...</div>
       </div>
     </div>
   `.trim();
@@ -170,7 +183,7 @@ async function renderBlock3DPreview(container, file) {
   }
 
   if (!url) {
-    renderBlockPreviewMessage(container, 'No se pudo resolver el modelo 3D.', null);
+    renderBlockPreviewMessage(contentEl, 'No se pudo resolver el modelo 3D.', null);
     return;
   }
 
@@ -178,8 +191,8 @@ async function renderBlock3DPreview(container, file) {
   mount.style.width = '100%';
   mount.style.height = '100%';
   mount.style.background = '#f8fafc';
-  container.innerHTML = '';
-  container.appendChild(mount);
+  contentEl.innerHTML = '';
+  contentEl.appendChild(mount);
 
   try {
     const { init3DViewer } = await import('./viewer3D.js');
@@ -191,23 +204,24 @@ async function renderBlock3DPreview(container, file) {
       onError: (err) => {
         console.error('3D block preview error:', err);
         const msg = err?.userMessage || 'No se pudo cargar el modelo 3D.';
-        renderBlockPreviewMessage(container, msg, 'Puedes abrirlo desde Planoteca para descargar/visualizar.');
+        renderBlockPreviewMessage(contentEl, msg, 'Puedes abrirlo desde Planoteca para descargar/visualizar.');
       }
     });
     blockPreviewDispose3D = () => instance?.dispose?.();
   } catch (e) {
     console.error('3D block preview init error:', e);
-    renderBlockPreviewMessage(container, 'No se pudo inicializar el visor 3D.', null);
+    renderBlockPreviewMessage(contentEl, 'No se pudo inicializar el visor 3D.', null);
   }
 }
 
 async function renderBlockPdfPreview(container, file) {
   disposeBlock3DPreview();
-  container.innerHTML = `
-    <div class="w-100 h-100 d-flex align-items-center justify-content-center">
-      <div class="text-center">
+  const contentEl = getMiniVisorContentEl(container);
+  contentEl.innerHTML = `
+    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;">
         <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
-        <div class="small text-secondary mt-2">Cargando plano (PDF)...</div>
+        <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:8px;">Cargando plano (PDF)...</div>
       </div>
     </div>
   `.trim();
@@ -220,7 +234,7 @@ async function renderBlockPdfPreview(container, file) {
   }
 
   if (!url) {
-    renderBlockPreviewMessage(container, 'No se pudo resolver el PDF.', null);
+    renderBlockPreviewMessage(contentEl, 'No se pudo resolver el PDF.', null);
     return;
   }
 
@@ -233,19 +247,20 @@ async function renderBlockPdfPreview(container, file) {
   iframe.loading = 'lazy';
   iframe.onload = () => { };
 
-  container.innerHTML = '';
-  container.appendChild(iframe);
+  contentEl.innerHTML = '';
+  contentEl.appendChild(iframe);
   iframe.src = `https://drive.google.com/viewerng/viewer?embedded=true&url=${encodeURIComponent(url)}`;
 }
 
 async function renderBlockImagesPreview(container, files) {
   disposeBlock3DPreview();
 
-  container.innerHTML = `
-    <div class="w-100 h-100 d-flex align-items-center justify-content-center">
-      <div class="text-center">
+  const contentEl = getMiniVisorContentEl(container);
+  contentEl.innerHTML = `
+    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;">
         <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
-        <div class="small text-secondary mt-2">Cargando fotos...</div>
+        <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:8px;">Cargando fotos...</div>
       </div>
     </div>
   `.trim();
@@ -261,7 +276,7 @@ async function renderBlockImagesPreview(container, files) {
   }
 
   if (!resolved.length) {
-    renderBlockPreviewMessage(container, 'No hay fotos disponibles para este bloque.', null);
+    renderBlockPreviewMessage(contentEl, 'No hay fotos disponibles para este bloque.', null);
     return;
   }
 
@@ -302,8 +317,8 @@ async function renderBlockImagesPreview(container, files) {
     outer.appendChild(next);
   }
 
-  container.innerHTML = '';
-  container.appendChild(outer);
+  contentEl.innerHTML = '';
+  contentEl.appendChild(outer);
 }
 
 async function renderBlockPreviewForTab(blockId, tab) {
@@ -367,27 +382,40 @@ async function renderBlockPreviewForTab(blockId, tab) {
   }
 }
 
-async function loadFirstFileFromPath(blockId, path, tab, container) {
-  disposeBlock3DPreview();
-  container.innerHTML = `
-    <div class="w-100 h-100 d-flex align-items-center justify-content-center">
-      <div class="text-center">
-        <div class="spinner-border text-primary" role="status" aria-hidden="true" style="color:var(--cyan) !important;"></div>
-        <div class="small mt-2" style="color:var(--text-secondary);">Buscando archivo en la ruta...</div>
-      </div>
-    </div>
-  `.trim();
+// ─── Mini-visor navigation: update arrows/counter UI ───
+function updateMiniVisorNavUI() {
+  const prevBtn = document.getElementById('mini-visor-nav-prev');
+  const nextBtn = document.getElementById('mini-visor-nav-next');
+  const counterEl = document.getElementById('mini-visor-nav-counter');
+  const hasMultiple = miniVisorFiles.length > 1;
 
-  const file = getFirstFileInPath(blockId, path);
-
-  if (!file) {
-    renderBlockPreviewMessage(container, 'Carpeta Vacía', 'No hay archivos para la especialidad seleccionada.');
-    const detailsBox = document.getElementById('visor-file-details');
-    if (detailsBox) detailsBox.style.display = 'none';
-    return;
+  if (prevBtn) {
+    if (hasMultiple) {
+      prevBtn.classList.remove('hidden');
+      prevBtn.disabled = miniVisorIndex <= 0;
+    } else {
+      prevBtn.classList.add('hidden');
+    }
   }
+  if (nextBtn) {
+    if (hasMultiple) {
+      nextBtn.classList.remove('hidden');
+      nextBtn.disabled = miniVisorIndex >= miniVisorFiles.length - 1;
+    } else {
+      nextBtn.classList.add('hidden');
+    }
+  }
+  if (counterEl) {
+    if (hasMultiple) {
+      counterEl.classList.remove('hidden');
+      counterEl.textContent = `${miniVisorIndex + 1} / ${miniVisorFiles.length}`;
+    } else {
+      counterEl.classList.add('hidden');
+    }
+  }
+}
 
-  // Update file details in UI (if exists)
+function updateMiniVisorFileDetails(file) {
   const detailName = document.getElementById('visor-detail-name');
   const detailSize = document.getElementById('visor-detail-size');
   const detailDate = document.getElementById('visor-detail-date');
@@ -396,16 +424,63 @@ async function loadFirstFileFromPath(blockId, path, tab, container) {
   if (detailSize) detailSize.textContent = file.size ? (file.size / 1024 / 1024).toFixed(2) + ' MB' : '--';
   if (detailDate) detailDate.textContent = file.fechaSubida ? new Date(file.fechaSubida).toLocaleDateString() : '--';
   if (detailsBox) detailsBox.style.display = 'block';
+}
 
-  // Render accordingly based on tab
+async function renderMiniVisorFileAtIndex(container, tab) {
+  if (miniVisorIndex < 0 || miniVisorIndex >= miniVisorFiles.length) return;
+  const file = miniVisorFiles[miniVisorIndex];
+  if (!file) return;
+
+  disposeBlock3DPreview();
+  updateMiniVisorFileDetails(file);
+  updateMiniVisorNavUI();
+
   if (tab === '3d') {
     await renderBlock3DPreview(container, file);
   } else if (tab === 'pdf') {
     await renderBlockPdfPreview(container, file);
   } else if (tab === 'img' || tab === 'renders') {
-    // Si hay multiples imagenes podriamos pasar un array, pero aquí pasamos 1 en array ya que usamos getFirstFileInPath
     await renderBlockImagesPreview(container, [file]);
   }
+}
+
+async function loadFirstFileFromPath(blockId, path, tab, container) {
+  disposeBlock3DPreview();
+  const contentEl = getMiniVisorContentEl(container);
+  contentEl.innerHTML = `
+    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+      <div style="text-align:center;">
+        <div class="spinner-border text-primary" role="status" aria-hidden="true" style="color:var(--cyan) !important;"></div>
+        <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:8px;">Buscando archivo en la ruta...</div>
+      </div>
+    </div>
+  `.trim();
+
+  // Load ALL files from this path for navigation
+  let allFiles = getFilesInPath(blockId, path);
+
+  // 🛡️ Strict .glb filter for 3D tab — only render 3D models
+  if (tab === '3d') {
+    allFiles = allFiles.filter(f => {
+      const name = String(f.nombre || f.name || '').toLowerCase();
+      return name.endsWith('.glb') || name.endsWith('.gltf');
+    });
+  }
+
+  miniVisorFiles = allFiles;
+  miniVisorIndex = allFiles.length > 0 ? 0 : -1;
+  miniVisorCurrentTab = tab;
+  miniVisorCurrentPath = path;
+
+  if (allFiles.length === 0) {
+    renderBlockPreviewMessage(container, 'Carpeta Vacía', 'No hay archivos para la especialidad seleccionada.');
+    const detailsBox = document.getElementById('visor-file-details');
+    if (detailsBox) detailsBox.style.display = 'none';
+    updateMiniVisorNavUI();
+    return;
+  }
+
+  await renderMiniVisorFileAtIndex(container, tab);
 }
 
 function wireBlockPreviewEvents() {
@@ -421,8 +496,42 @@ function wireBlockPreviewEvents() {
     const tab = btn.getAttribute('data-block-preview-tab');
     if (!tab) return;
     setBlockPreviewActive(tab);
+    // Reset navigation when switching tabs
+    miniVisorFiles = [];
+    miniVisorIndex = -1;
+    updateMiniVisorNavUI();
     if (blockPreviewLastBlockId) renderBlockPreviewForTab(blockPreviewLastBlockId, tab);
   }, true);
+
+  // ─── Mini-visor navigation arrows ───
+  const miniPrev = document.getElementById('mini-visor-nav-prev');
+  const miniNext = document.getElementById('mini-visor-nav-next');
+
+  if (miniPrev) {
+    miniPrev.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (miniVisorIndex <= 0) return;
+      miniVisorIndex--;
+      const container = document.getElementById('block-preview-container');
+      if (container && miniVisorCurrentTab) {
+        renderMiniVisorFileAtIndex(container, miniVisorCurrentTab);
+      }
+    });
+  }
+
+  if (miniNext) {
+    miniNext.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (miniVisorIndex >= miniVisorFiles.length - 1) return;
+      miniVisorIndex++;
+      const container = document.getElementById('block-preview-container');
+      if (container && miniVisorCurrentTab) {
+        renderMiniVisorFileAtIndex(container, miniVisorCurrentTab);
+      }
+    });
+  }
 
   document.addEventListener('click', (e) => {
     const btn = e.target?.closest?.('#btn-go-planoteca');

@@ -237,10 +237,20 @@
                         <!-- VISOR Tab -->
                         <div id="panel-visor" class="panel-content active">
                             <div class="visor-preview-area" id="block-preview-container">
-                                <div style="text-align:center;color:var(--text-muted);">
-                                    <i class="ph ph-cube" style="font-size:3rem;display:block;margin-bottom:8px;"></i>
-                                    <p style="font-size:0.82rem;">Selecciona un bloque para previsualizar</p>
+                                <div id="mini-visor-content" style="width:100%;height:100%;position:relative;">
+                                    <div style="text-align:center;color:var(--text-muted);display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;">
+                                        <i class="ph ph-cube" style="font-size:3rem;display:block;margin-bottom:8px;"></i>
+                                        <p style="font-size:0.82rem;">Selecciona un bloque para previsualizar</p>
+                                    </div>
                                 </div>
+                                <!-- Mini-visor Navigation Arrows -->
+                                <button id="mini-visor-nav-prev" class="mini-visor-nav-arrow mini-visor-nav-prev hidden" title="Anterior">
+                                    <i class="ph ph-caret-left"></i>
+                                </button>
+                                <button id="mini-visor-nav-next" class="mini-visor-nav-arrow mini-visor-nav-next hidden" title="Siguiente">
+                                    <i class="ph ph-caret-right"></i>
+                                </button>
+                                <div id="mini-visor-nav-counter" class="mini-visor-nav-counter hidden"></div>
                             </div>
 
                             <div class="visor-type-buttons" id="block-preview-tabs">

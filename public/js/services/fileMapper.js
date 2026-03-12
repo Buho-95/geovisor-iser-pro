@@ -64,13 +64,31 @@ export function getPathsForFilter(filterType) {
 export function getFilesInPath(blockId, filterPath) {
     const files = Array.isArray(state.archivosNube) ? state.archivosNube : [];
 
+    // Build set of acceptable block identifiers (ID + display name variants)
+    const validBlocks = new Set();
+    validBlocks.add(String(blockId).toLowerCase());
+    // Also resolve the block's display name from campus-data if available
+    try {
+        const campusData = window.__campusDataCache;
+        if (campusData && campusData[blockId]) {
+            const name = campusData[blockId].name;
+            if (name) {
+                validBlocks.add(name.toLowerCase());
+                validBlocks.add(normalizeKey(name));
+            }
+        }
+    } catch { /* noop */ }
+
     return files.filter(f => {
         if (!f) return false;
 
-        // Comparación estricta de bloque
-        if (String(f.bloque || '') !== String(blockId)) return false;
+        // Match bloque by ID or display name
+        const fBloque = String(f.bloque || '').toLowerCase();
+        const fBloqueNorm = normalizeKey(f.bloque);
+        const bloqueMatch = validBlocks.has(fBloque) || validBlocks.has(fBloqueNorm);
+        if (!bloqueMatch) return false;
 
-        // Validar si la ruta de carpeta coincide (usando startswith por si tiene subcarpetas adicionales o coincidencia exacta)
+        // Validate folder path
         const folderPath = String(f.carpeta || '');
         return folderPath === filterPath || folderPath.startsWith(filterPath + '/');
     });
