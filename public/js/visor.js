@@ -310,7 +310,10 @@ export async function openViewer(file) {
     else if (name.endsWith('.xlsx') || name.endsWith('.xls')) fileType = 'excel';
     else if (name.endsWith('.csv')) fileType = 'csv';
     else if (name.endsWith('.pdf')) fileType = 'pdf';
+    else if (name.endsWith('.doc') || name.endsWith('.docx')) fileType = 'word';
+    else if (name.endsWith('.ppt') || name.endsWith('.pptx')) fileType = 'ppt';
     else if (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') || name.endsWith('.gif')) fileType = 'img';
+    else if (name.endsWith('.mp4') || name.endsWith('.webm') || name.endsWith('.ogg')) fileType = 'video';
   }
 
   document.getElementById('visor-tipo-label').textContent = fileType.toUpperCase();
@@ -346,10 +349,20 @@ export async function openViewer(file) {
 
   switch (fileType) {
     case 'pdf':
-      iconEl.className = 'ph-fill ph-file-pdf';
-      iconEl.style.cssText = 'font-size:1.5rem;color:var(--pink);';
+    case 'word':
+    case 'ppt':
+      if (fileType === 'pdf') {
+        iconEl.className = 'ph-fill ph-file-pdf';
+        iconEl.style.cssText = 'font-size:1.5rem;color:var(--pink);';
+      } else if (fileType === 'word') {
+        iconEl.className = 'ph-fill ph-file-doc';
+        iconEl.style.cssText = 'font-size:1.5rem;color:#1976D2;'; // Blue for Word
+      } else {
+        iconEl.className = 'ph-fill ph-presentation-chart';
+        iconEl.style.cssText = 'font-size:1.5rem;color:#FF6D00;'; // Orange for PPT
+      }
       if (iframeEl) {
-        iframeEl.src = `https://docs.google.com/viewer?url=${encodeURIComponent(file.url)}&embedded=true`;
+        iframeEl.src = `https://docs.google.com/viewerng/viewer?embedded=true&url=${encodeURIComponent(file.url)}`;
         iframeEl.style.display = 'block';
       }
       if (msgEl) msgEl.classList.add('hidden');
@@ -361,6 +374,17 @@ export async function openViewer(file) {
         iframeEl.style.display = 'none';
         iframeEl.parentElement.insertAdjacentHTML('beforeend',
           `<img src="${file.url}" style="width:100%;height:100%;object-fit:contain;background:var(--midnight-mid);" id="visor-img-direct">`
+        );
+      }
+      if (msgEl) msgEl.classList.add('hidden');
+      break;
+    case 'video':
+      iconEl.className = 'ph-fill ph-video-camera';
+      iconEl.style.cssText = 'font-size:1.5rem;color:#00E5FF;';
+      if (iframeEl) {
+        iframeEl.style.display = 'none';
+        iframeEl.parentElement.insertAdjacentHTML('beforeend',
+          `<video src="${file.url}" controls autoplay style="width:100%;height:100%;background:black;outline:none;" id="visor-video-direct"></video>`
         );
       }
       if (msgEl) msgEl.classList.add('hidden');

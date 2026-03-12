@@ -821,67 +821,22 @@ class DocPreviewModal {
       return;
     }
 
-    if (tipo === 'pdf') {
+    if (tipo === 'pdf' || tipo === 'word' || tipo === 'ppt' || 
+        ext === 'pdf' || ext === 'doc' || ext === 'docx' || ext === 'ppt' || ext === 'pptx') {
       const content = this.bodyEl.querySelector('[data-doc-preview-content]');
       if (!content) return;
 
-      const host = document.createElement('div');
-      host.className = 'w-100 h-100 d-flex flex-column';
-      content.appendChild(host);
-
-      const toolbar = document.createElement('div');
-      toolbar.className = 'd-flex gap-2 align-items-center justify-content-end p-2 border-bottom bg-white';
-      toolbar.innerHTML = `
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-pdf-mode="google">Visor Google</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-pdf-mode="direct">Visor Directo</button>
-      `.trim();
-      host.appendChild(toolbar);
-
-      const viewport = document.createElement('div');
-      viewport.className = 'flex-grow-1';
-      viewport.style.minHeight = '0';
-      host.appendChild(viewport);
-
-      const renderGoogle = () => {
-        viewport.innerHTML = '';
-        const iframe = document.createElement('iframe');
-        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
-        iframe.setAttribute('referrerpolicy', 'no-referrer');
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-        iframe.style.border = '0';
-        iframe.onload = () => this._markLoaded();
-        viewport.appendChild(iframe);
-        const viewerUrl = `https://drive.google.com/viewerng/viewer?embedded=true&url=${encodeURIComponent(url)}`;
-        iframe.src = viewerUrl;
-      };
-
-      const renderDirect = () => {
-        viewport.innerHTML = '';
-        const embed = document.createElement('embed');
-        embed.type = 'application/pdf';
-        embed.style.width = '100%';
-        embed.style.height = '100%';
-        embed.onload = () => this._markLoaded();
-        viewport.appendChild(embed);
-        embed.src = url;
-      };
-
-      toolbar.addEventListener('click', (e) => {
-        const btn = e.target?.closest?.('[data-pdf-mode]');
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const mode = btn.getAttribute('data-pdf-mode');
-        if (mode === 'direct') renderDirect();
-        else renderGoogle();
-      });
-
-      renderGoogle();
+      const iframe = document.createElement('iframe');
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.border = '0';
+      iframe.onload = () => this._markLoaded();
+      content.appendChild(iframe);
+      iframe.src = `https://docs.google.com/viewerng/viewer?embedded=true&url=${encodeURIComponent(url)}`;
       return;
     }
 
-    if (tipo === 'img') {
+    if (tipo === 'img' || ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'gif') {
       const img = document.createElement('img');
       img.style.maxWidth = '100%';
       img.style.maxHeight = '100%';
@@ -890,15 +845,82 @@ class DocPreviewModal {
       img.src = url;
       const content = this.bodyEl.querySelector('[data-doc-preview-content]');
       if (content) {
-        content.classList.add('d-flex', 'align-items-center', 'justify-content-center', 'bg-light');
+        content.classList.add('d-flex', 'align-items-center', 'justify-content-center', 'bg-dark');
         content.appendChild(img);
       }
       return;
     }
 
+    if (tipo === 'video' || ext === 'mp4' || ext === 'webm' || ext === 'ogg') {
+      const video = document.createElement('video');
+      video.controls = true;
+      video.autoplay = true;
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.backgroundColor = 'black';
+      video.style.outline = 'none';
+      video.onloadeddata = () => this._markLoaded();
+      video.src = url;
+      const content = this.bodyEl.querySelector('[data-doc-preview-content]');
+      if (content) {
+        content.classList.add('d-flex', 'align-items-center', 'justify-content-center', 'bg-dark');
+        content.appendChild(video);
+      }
+      return;
+    }
+
+    if (tipo === 'excel' || tipo === 'csv' || ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+      const content = this.bodyEl.querySelector('[data-doc-preview-content]');
+      if (!content) return;
+      
+      const isCSV = ext === 'csv';
+      
+      fetch(url)
+        .then(res => res.arrayBuffer())
+        .then(arrayBuffer => {
+          let workbook;
+          if (isCSV) {
+            const text = new TextDecoder('utf-8').decode(arrayBuffer);
+            workbook = XLSX.read(text, { type: 'string' });
+          } else {
+            workbook = XLSX.read(arrayBuffer, { type: 'array' });
+          }
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const htmlTable = XLSX.utils.sheet_to_html(firstSheet, { id: 'excel-table-visor' });
+
+          const container = document.createElement('div');
+          container.style.cssText = `
+            width:100%;height:100%;overflow:auto;background:var(--midnight-mid);padding:12px;
+            font-family:'Inter',sans-serif;
+          `;
+          container.innerHTML = `
+            <style>
+              #excel-table-visor { border-collapse: collapse; width: 100%; font-size: 0.78rem; color: var(--text-primary); }
+              #excel-table-visor th, #excel-table-visor td { border: 1px solid var(--border-subtle); padding: 6px 10px; text-align: left; white-space: nowrap; }
+              #excel-table-visor th, #excel-table-visor tr:first-child td { background: var(--cyan-dim); color: var(--cyan); font-weight: 700; text-transform: uppercase; font-size: 0.7rem; position: sticky; top: 0; z-index: 1; }
+              #excel-table-visor tr:nth-child(even) { background: rgba(255,255,255,0.03); }
+              #excel-table-visor tr:hover { background: var(--surface-hover); }
+            </style>
+            ${htmlTable}
+          `;
+          content.appendChild(container);
+          this._markLoaded();
+        })
+        .catch(err => {
+          console.error('Error renderizando Excel/CSV en preview:', err);
+          content.innerHTML = `
+            <div class="w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center">
+              <i class="ph ph-warning" style="font-size:3rem;margin-bottom:1rem;color:var(--amber);"></i>
+              <div class="text-secondary mb-2">Error al renderizar el archivo. Descárguelo para verlo.</div>
+            </div>`;
+          this._markLoaded();
+        });
+      return;
+    }
+
     const dlBtnNative = state.userRole === 'admin' ? '<button type="button" class="btn btn-primary" data-doc-download-now>Descargar archivo</button>' : '<div class="text-muted" style="font-size:0.8rem;margin-top:8px;">Contacte al administrador para obtener este archivo.</div>';
     this.bodyEl.innerHTML = `
-      <div data-doc-preview-root class="w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center">
+      <div data-doc-preview-root class="w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center bg-dark">
         <div class="text-secondary mb-2">Este tipo de archivo requiere descarga para abrirse en un visor nativo.</div>
         ${dlBtnNative}
       </div>
