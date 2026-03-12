@@ -693,6 +693,15 @@ class DocPreviewModal {
     this.titleEl.textContent = file?.nombre || 'Documento';
     this.bodyEl.innerHTML = this._loadingShell();
 
+    // 🚫 Mostrar/ocultar botón de descarga según rol
+    if (this.btnDownload) {
+      if (state.userRole === 'admin') {
+        this.btnDownload.classList.remove('hidden');
+      } else {
+        this.btnDownload.classList.add('hidden');
+      }
+    }
+
     const modal = this._getModal();
     if (modal) modal.show();
 
@@ -747,10 +756,11 @@ class DocPreviewModal {
           onError: (err) => {
             console.error('3D load error:', err);
             const msg = err?.userMessage || 'No se pudo cargar el modelo 3D.';
+            const dlBtnHtml = state.userRole === 'admin' ? '<button type="button" class="btn btn-outline-primary" data-doc-download-now>Descargar archivo</button>' : '';
             this.bodyEl.innerHTML = `
               <div data-doc-preview-root class="w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center">
                 <div class="text-secondary mb-2">${msg}</div>
-                <button type="button" class="btn btn-outline-primary" data-doc-download-now>Descargar archivo</button>
+                ${dlBtnHtml}
               </div>
             `.trim();
             const dlBtn = this.bodyEl.querySelector('[data-doc-download-now]');
@@ -764,10 +774,11 @@ class DocPreviewModal {
         this._dispose3D = () => instance?.dispose?.();
       } catch (e) {
         console.error('3D init error:', e);
+        const dlBtnHtml2 = state.userRole === 'admin' ? '<button type="button" class="btn btn-outline-primary" data-doc-download-now>Descargar archivo</button>' : '';
         this.bodyEl.innerHTML = `
           <div data-doc-preview-root class="w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center">
             <div class="text-secondary mb-2">No se pudo inicializar el visor 3D.</div>
-            <button type="button" class="btn btn-outline-primary" data-doc-download-now>Descargar archivo</button>
+            ${dlBtnHtml2}
           </div>
         `.trim();
         const dlBtn = this.bodyEl.querySelector('[data-doc-download-now]');
@@ -855,10 +866,11 @@ class DocPreviewModal {
       return;
     }
 
+    const dlBtnNative = state.userRole === 'admin' ? '<button type="button" class="btn btn-primary" data-doc-download-now>Descargar archivo</button>' : '<div class="text-muted" style="font-size:0.8rem;margin-top:8px;">Contacte al administrador para obtener este archivo.</div>';
     this.bodyEl.innerHTML = `
       <div data-doc-preview-root class="w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center">
         <div class="text-secondary mb-2">Este tipo de archivo requiere descarga para abrirse en un visor nativo.</div>
-        <button type="button" class="btn btn-primary" data-doc-download-now>Descargar archivo</button>
+        ${dlBtnNative}
       </div>
     `.trim();
 
@@ -899,6 +911,12 @@ function setupDocViewerDelegationOnce() {
     if (!btn) return;
     e.preventDefault();
     e.stopPropagation();
+
+    // 🚫 Bloquear descarga para visitantes
+    if (state.userRole !== 'admin') {
+      console.warn('🚫 Descarga bloqueada: modo visitante');
+      return;
+    }
 
     const raw = btn.getAttribute('data-doc-download');
     if (!raw) return;
@@ -1032,9 +1050,9 @@ function crearArchivoItem(archivo) {
         </div>
         <div class="flex items-center gap-3 text-xs" style="color:var(--text-muted);">
           <span>${tamaño}</span>
-          <button data-doc-download="${fileJson}" class="btn-visor-action" style="padding:4px; font-size:0.9rem; background:none; border:none; color:var(--text-secondary); cursor:pointer;" title="Descargar" onmouseover="this.style.color='var(--cyan)';" onmouseout="this.style.color='var(--text-secondary)';">
+          ${state.userRole === 'admin' ? `<button data-doc-download="${fileJson}" class="btn-visor-action" style="padding:4px; font-size:0.9rem; background:none; border:none; color:var(--text-secondary); cursor:pointer;" title="Descargar" onmouseover="this.style.color='var(--cyan)';" onmouseout="this.style.color='var(--text-secondary)';">
              <i class="ph ph-cloud-arrow-down"></i>
-          </button>
+          </button>` : ''}
         </div>
       </div>
     </li>
@@ -1185,9 +1203,9 @@ function crearArchivoCard(archivo) {
         <button class="file-action-btn" title="Ver archivo" data-open-viewer='${encodeURIComponent(JSON.stringify(archivo))}'>
           <i class="ph ph-eye"></i>
         </button>
-        <button class="file-action-btn" title="Descargar" onclick="window.open('${archivo.url}', '_blank')">
+        ${state.userRole === 'admin' ? `<button class="file-action-btn" title="Descargar" onclick="window.open('${archivo.url}', '_blank')">
           <i class="ph ph-download"></i>
-        </button>
+        </button>` : ''}
       </div>
     </div>
   `;

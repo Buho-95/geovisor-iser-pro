@@ -290,7 +290,17 @@ export function setVisorFileList(fileList) {
 export async function openViewer(file) {
   state.currentFileViewing = file;
   document.getElementById('visor-titulo').innerText = file.nombre;
-  document.getElementById('visor-btn-descargar').href = file.url;
+
+  // 🚫 Botón de descarga: solo visible para admins
+  const descargarBtn = document.getElementById('visor-btn-descargar');
+  if (descargarBtn) {
+    descargarBtn.href = file.url;
+    if (state.userRole === 'admin') {
+      descargarBtn.classList.remove('hidden');
+    } else {
+      descargarBtn.classList.add('hidden');
+    }
+  }
 
   // Fallback type detection from file extension (for files uploaded before type detection)
   let fileType = file.tipo || 'otro';

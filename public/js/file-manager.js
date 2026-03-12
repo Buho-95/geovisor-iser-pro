@@ -560,13 +560,13 @@ class FileManager {
             </div>
             <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
               <span style="font-size:0.65rem;color:var(--text-muted);">${size}</span>
-              <button data-doc-download="${fileJson}" style="
+              ${isAdmin ? `<button data-doc-download="${fileJson}" style="
                 padding:4px;font-size:0.9rem;background:none;border:none;
                 color:var(--text-secondary);cursor:pointer;" title="Descargar"
                 onmouseover="this.style.color='var(--cyan)';"
                 onmouseout="this.style.color='var(--text-secondary)';">
                 <i class="ph ph-cloud-arrow-down"></i>
-              </button>${deleteBtn}
+              </button>` : ''}${deleteBtn}
             </div>
           </div>
         </li>`;

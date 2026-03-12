@@ -1,5 +1,6 @@
 /**
  * Servicio de autenticación. Firebase Auth + Modo Visitante.
+ * 🔐 Incluye guardia de rutas y verificación periódica de sesión.
  */
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -7,11 +8,54 @@ import { auth, db } from './firebase.js';
 import { state, setUser } from '../core/state.js';
 import { COLLECTIONS } from '../core/config.js';
 
+// ═══════════════════════════════════════════════════════
+// 🔐 AUTH GUARD — Fuerza la pantalla de login si no hay sesión válida
+// ═══════════════════════════════════════════════════════
+function enforceAuthGuard() {
+  // Ocultar la app y mostrar login
+  const appContainer = document.getElementById('app-container');
+  const authScreen = document.getElementById('auth-screen');
+
+  if (appContainer) appContainer.classList.remove('visible');
+  if (authScreen) authScreen.classList.remove('hidden-auth');
+
+  // Limpiar estado
+  state.user = null;
+  state.userProfile = null;
+  state.userRole = null;
+
+  // Ocultar elementos admin
+  document.getElementById('btn-open-upload')?.classList.add('hidden');
+  document.getElementById('visor-btn-eliminar')?.classList.add('hidden');
+  document.getElementById('btn-logout')?.classList.add('hidden');
+  document.getElementById('btn-exit-visitor')?.classList.add('hidden');
+
+  console.log('🔐 Auth Guard: Sesión inválida — redirigido a Login.');
+}
+
+/**
+ * Verifica si el usuario actual tiene un rol válido (admin con sesión o visitor).
+ * Exportada para que otros módulos puedan consultar el estado.
+ */
+export function isAuthenticated() {
+  return state.userRole === 'admin' && auth.currentUser != null;
+}
+
+export function isAdmin() {
+  return state.userRole === 'admin' && auth.currentUser != null;
+}
+
+export function isVisitor() {
+  return state.userRole === 'visitor';
+}
+
 export function initAuth(callbacks = {}) {
   const { onLoginSuccess, onAuthChange } = callbacks;
 
-  // Persistencia de SESIÓN — al cerrar navegador/pestaña, la sesión expira
-  setPersistence(auth, browserSessionPersistence).catch(console.error);
+  // 🛡️ Persistencia de SESIÓN — al cerrar navegador/pestaña, la sesión expira
+  setPersistence(auth, browserSessionPersistence)
+    .then(() => console.log('🛡️ Persistencia configurada: SESSION (se destruye al cerrar pestaña/navegador)'))
+    .catch(err => console.error('❌ Error configurando persistencia:', err));
 
   const form = document.getElementById('login-form');
   const btnVisitor = document.getElementById('btn-visitor');
@@ -33,6 +77,7 @@ export function initAuth(callbacks = {}) {
       // Hide admin-only elements
       document.getElementById('btn-open-upload')?.classList.add('hidden');
       document.getElementById('visor-btn-eliminar')?.classList.add('hidden');
+      document.getElementById('visor-btn-descargar')?.classList.add('hidden');
       document.getElementById('btn-logout')?.classList.add('hidden');
       if (btnExitVisitor) btnExitVisitor.classList.remove('hidden');
 
@@ -55,6 +100,9 @@ export function initAuth(callbacks = {}) {
       btn.disabled = true;
 
       try {
+        // Garantizar persistencia SESSION antes de login
+        await setPersistence(auth, browserSessionPersistence);
+
         await signInWithEmailAndPassword(
           auth,
           document.getElementById('email').value,
@@ -71,6 +119,7 @@ export function initAuth(callbacks = {}) {
         // Show admin-only elements
         document.getElementById('btn-open-upload')?.classList.remove('hidden');
         document.getElementById('visor-btn-eliminar')?.classList.remove('hidden');
+        document.getElementById('visor-btn-descargar')?.classList.remove('hidden');
         document.getElementById('btn-logout')?.classList.remove('hidden');
         if (btnExitVisitor) btnExitVisitor.classList.add('hidden');
 
@@ -136,6 +185,7 @@ export function initAuth(callbacks = {}) {
       // Restaurar interfaz visual para Admin
       document.getElementById('btn-open-upload')?.classList.remove('hidden');
       document.getElementById('visor-btn-eliminar')?.classList.remove('hidden');
+      document.getElementById('visor-btn-descargar')?.classList.remove('hidden');
       document.getElementById('btn-logout')?.classList.remove('hidden');
       const btnExitV = document.getElementById('btn-exit-visitor');
       if (btnExitV) btnExitV.classList.add('hidden');
@@ -150,15 +200,29 @@ export function initAuth(callbacks = {}) {
 
       onLoginSuccess?.();
     } else if (!u) {
-      // ── Sin sesión: mostrar login ──
-      state.userProfile = null;
-      state.userRole = null;
+      // ── Sin sesión y no es visitor: forzar guardia ──
+      if (state.userRole !== 'visitor') {
+        enforceAuthGuard();
+      }
 
       // Reveal auth-screen and hide loading
       const authScreen = document.getElementById('auth-screen');
-      if (authScreen) authScreen.classList.remove('hidden-auth');
+      if (authScreen && state.userRole !== 'visitor') {
+        authScreen.classList.remove('hidden-auth');
+      }
       if (loadingScreen) loadingScreen.classList.add('loading-hidden');
     }
     onAuthChange?.(u);
   });
+
+  // ═══════════════════════════════════════════════════════
+  // 🔐 VERIFICACIÓN PERIÓDICA DE SESIÓN (cada 5 segundos)
+  // Detecta si el estado de React dice "admin" pero Firebase ya no tiene sesión
+  // ═══════════════════════════════════════════════════════
+  setInterval(() => {
+    if (state.userRole === 'admin' && !auth.currentUser) {
+      console.warn('🔐 Verificación periódica: sesión admin inválida detectada');
+      enforceAuthGuard();
+    }
+  }, 5000);
 }
