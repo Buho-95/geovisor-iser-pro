@@ -577,7 +577,7 @@ class DocPreviewModal {
     this.titleEl = document.getElementById('doc-viewer-modal-title');
     this.bodyEl = document.getElementById('doc-viewer-modal-body');
     this.btnDownload = document.getElementById('doc-viewer-modal-download');
-    this.btnFullscreen = document.getElementById('doc-viewer-modal-fullscreen');
+    this.btnFloatingFullscreen = null; // Se inicializa al abrir un doc
     this._bsModal = null;
     this._currentFile = null;
     this._currentUrl = null;
@@ -621,15 +621,20 @@ class DocPreviewModal {
       a.remove();
     });
 
-    this.btnFullscreen?.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const node = this.bodyEl?.querySelector?.('[data-doc-preview-root]');
-      if (!node?.requestFullscreen) return;
-      try {
-        await node.requestFullscreen();
-      } catch (err) {
-        console.error('Fullscreen error:', err);
+    // El botón flotante se maneja en open() porque se inyecta dinámicamente
+
+    // Listener para cambios de fullscreen (incluye tecla ESC)
+    document.addEventListener('fullscreenchange', () => {
+      if (!this.btnFloatingFullscreen) return;
+      const icon = this.btnFloatingFullscreen.querySelector('i');
+      if (!icon) return;
+
+      if (document.fullscreenElement) {
+        icon.className = 'ph ph-corners-in';
+        this.btnFloatingFullscreen.title = 'Salir de Pantalla Completa';
+      } else {
+        icon.className = 'ph ph-corners-out';
+        this.btnFloatingFullscreen.title = 'Pantalla Completa';
       }
     });
   }
@@ -654,7 +659,11 @@ class DocPreviewModal {
 
   _loadingShell() {
     return `
-      <div data-doc-preview-root class="w-100 h-100 position-relative">
+      <div data-doc-preview-root class="w-100 h-100 position-relative bg-dark">
+        <!-- Botón Flotante Fullscreen -->
+        <button class="btn-floating-fullscreen" title="Pantalla Completa">
+          <i class="ph ph-corners-out"></i>
+        </button>
         <div data-doc-preview-loading class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center bg-white" style="z-index: 2;">
           <div class="text-center">
             <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
@@ -700,6 +709,27 @@ class DocPreviewModal {
       } else {
         this.btnDownload.classList.add('hidden');
       }
+    }
+
+    // Lógica del botón flotante de fullscreen
+    this.btnFloatingFullscreen = this.bodyEl.querySelector('.btn-floating-fullscreen');
+    if (this.btnFloatingFullscreen) {
+      this.btnFloatingFullscreen.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const root = this.bodyEl.querySelector('[data-doc-preview-root]');
+        if (!root) return;
+
+        try {
+          if (!document.fullscreenElement) {
+            await root.requestFullscreen();
+          } else {
+            await document.exitFullscreen();
+          }
+        } catch (err) {
+          console.error('Error toggling fullscreen:', err);
+        }
+      });
     }
 
     const modal = this._getModal();

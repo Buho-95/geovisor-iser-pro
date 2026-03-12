@@ -486,6 +486,40 @@ export function setupVisorButtons() {
     });
   }
 
+  // Lógica del botón de Pantalla Completa
+  const btnFullscreen = document.getElementById('visor-btn-fullscreen');
+  const visorBody = document.querySelector('.visor-body');
+  
+  if (btnFullscreen && visorBody) {
+    btnFullscreen.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      try {
+        if (!document.fullscreenElement) {
+          await visorBody.requestFullscreen();
+        } else {
+          await document.exitFullscreen();
+        }
+      } catch (err) {
+        console.error('Error toggling fullscreen:', err);
+      }
+    });
+
+    // Escuchar el evento nativo para sincronizar el ícono (ej. al salir con ESC)
+    document.addEventListener('fullscreenchange', () => {
+      const icon = btnFullscreen.querySelector('i');
+      if (!icon) return;
+
+      if (document.fullscreenElement) {
+        icon.className = 'ph ph-corners-in';
+        btnFullscreen.title = 'Salir de Pantalla Completa';
+      } else {
+        icon.className = 'ph ph-corners-out';
+        btnFullscreen.title = 'Pantalla Completa';
+      }
+    });
+  }
+
   // Cerrar al hacer clic fuera del modal
   if (visorModal) {
     visorModal.addEventListener('click', (e) => {

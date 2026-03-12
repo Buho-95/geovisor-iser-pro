@@ -133,8 +133,6 @@
                     <div id="doc-viewer-modal-body" class="w-100 h-100"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" id="doc-viewer-modal-fullscreen" class="btn btn-outline-secondary">Pantalla
-                        Completa</button>
                     <button type="button" id="doc-viewer-modal-download" class="btn btn-outline-primary hidden">Descargar
                         archivo</button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
@@ -378,6 +376,10 @@
                 </div>
             </div>
             <div class="visor-body">
+                <!-- Botón flotante de Pantalla Completa -->
+                <button id="visor-btn-fullscreen" class="btn-floating-fullscreen" title="Pantalla Completa">
+                    <i class="ph ph-corners-out"></i>
+                </button>
                 <iframe id="visor-iframe" src=""></iframe>
                 <div id="visor-mensaje" class="hidden">
                     <i id="visor-mensaje-icono" class="ph ph-cube" style="font-size:4rem;margin-bottom:1rem;"></i>
