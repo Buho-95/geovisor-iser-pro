@@ -125,6 +125,7 @@ export async function init3DViewer({ container, url, onLoaded, onError, onStart,
   controls.minDistance = 0.01;
 
   container.innerHTML = '';
+  container.style.position = 'relative';
   container.appendChild(renderer.domElement);
 
   let destroyed = false;
@@ -184,6 +185,136 @@ export async function init3DViewer({ container, url, onLoaded, onError, onStart,
     try { onStart?.(); } catch { /* noop */ }
   };
 
+  // ── 3D Control Panel (Glassmorphism) ──
+  function createControlPanel() {
+    // Remove any existing panel
+    container.querySelectorAll('.viewer3d-ctrl-toggle, .viewer3d-panel').forEach(el => el.remove());
+
+    // Toggle button (gear icon)
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'viewer3d-ctrl-toggle';
+    toggleBtn.innerHTML = '⚙';
+    toggleBtn.title = 'Controles 3D';
+
+    // Panel
+    const panel = document.createElement('div');
+    panel.className = 'viewer3d-panel hidden';
+    panel.innerHTML = `
+      <div class="viewer3d-panel-header">
+        <span>⚙ Controles 3D</span>
+        <button class="viewer3d-panel-close" title="Cerrar">✕</button>
+      </div>
+
+      <div class="viewer3d-ctrl-row">
+        <label>Auto-Rotación</label>
+        <label class="viewer3d-switch">
+          <input type="checkbox" data-ctrl="autorotate">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="viewer3d-ctrl-row">
+        <label>Wireframe</label>
+        <label class="viewer3d-switch">
+          <input type="checkbox" data-ctrl="wireframe">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="viewer3d-section">
+        <div class="viewer3d-ctrl-row" style="margin-bottom:2px;">
+          <label>Exposición</label>
+          <span style="font-size:0.62rem;color:rgba(255,255,255,0.45);" data-exposure-val>1.0</span>
+        </div>
+        <input type="range" class="viewer3d-range" data-ctrl="exposure" min="0.2" max="3.0" step="0.1" value="1.0">
+      </div>
+
+      <div class="viewer3d-section">
+        <div class="viewer3d-ctrl-row" style="margin-bottom:4px;">
+          <label>Fondo</label>
+        </div>
+        <div class="viewer3d-bg-swatches">
+          <div class="viewer3d-bg-swatch" data-bg="light" title="Claro"></div>
+          <div class="viewer3d-bg-swatch active" data-bg="dark" title="Oscuro"></div>
+          <div class="viewer3d-bg-swatch" data-bg="green" title="Verde Institucional"></div>
+        </div>
+      </div>
+    `;
+
+    container.appendChild(toggleBtn);
+    container.appendChild(panel);
+
+    // Toggle open/close
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      panel.classList.remove('hidden');
+      toggleBtn.style.display = 'none';
+    });
+    panel.querySelector('.viewer3d-panel-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      panel.classList.add('hidden');
+      toggleBtn.style.display = '';
+    });
+
+    // Prevent orbit controls from reacting to panel interactions
+    panel.addEventListener('pointerdown', e => e.stopPropagation());
+    panel.addEventListener('mousedown', e => e.stopPropagation());
+    panel.addEventListener('wheel', e => e.stopPropagation());
+
+    // ── Auto-Rotation ──
+    const autoRotateInput = panel.querySelector('[data-ctrl="autorotate"]');
+    autoRotateInput.addEventListener('change', () => {
+      controls.autoRotate = autoRotateInput.checked;
+      controls.autoRotateSpeed = 2.0;
+    });
+
+    // ── Wireframe ──
+    const wireframeInput = panel.querySelector('[data-ctrl="wireframe"]');
+    wireframeInput.addEventListener('change', () => {
+      const isWire = wireframeInput.checked;
+      scene.traverse(child => {
+        if (child.isMesh && child.material) {
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          mats.forEach(m => { if (m) m.wireframe = isWire; });
+        }
+      });
+    });
+
+    // ── Exposure slider ──
+    const exposureInput = panel.querySelector('[data-ctrl="exposure"]');
+    const exposureVal = panel.querySelector('[data-exposure-val]');
+    exposureInput.addEventListener('input', () => {
+      const val = parseFloat(exposureInput.value);
+      renderer.toneMappingExposure = val;
+      if (exposureVal) exposureVal.textContent = val.toFixed(1);
+      // Also scale ambient light
+      ambient.intensity = 0.75 * val;
+      dir.intensity = 1.1 * val;
+    });
+
+    // ── Background color swatches ──
+    const bgColors = {
+      light: { color: 0xf0f0f0, alpha: 1 },
+      dark:  { color: 0x1a1a2e, alpha: 1 },
+      green: { color: 0x2E7D32, alpha: 1 }
+    };
+    panel.querySelectorAll('.viewer3d-bg-swatch').forEach(swatch => {
+      swatch.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const bg = swatch.getAttribute('data-bg');
+        const c = bgColors[bg];
+        if (!c) return;
+        renderer.setClearColor(c.color, c.alpha);
+        // Update active state
+        panel.querySelectorAll('.viewer3d-bg-swatch').forEach(s => s.classList.remove('active'));
+        swatch.classList.add('active');
+      });
+    });
+
+    // Set initial dark background
+    renderer.setClearColor(0x1a1a2e, 1);
+  }
+
   try {
     safeStart();
     loader.load(
@@ -197,6 +328,8 @@ export async function init3DViewer({ container, url, onLoaded, onError, onStart,
         }
         try { onLoaded?.(); } catch { /* noop */ }
         animate();
+        // ── Inject control panel after model loads ──
+        try { createControlPanel(); } catch (e) { console.warn('Control panel error:', e); }
       },
       (xhr) => {
         safeStart();
