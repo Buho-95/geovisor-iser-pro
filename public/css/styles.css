@@ -781,8 +781,8 @@ body {
 .visor-preview-area {
   position: relative;
   background: var(--midnight-mid);
-  height: 30vh !important;
-  min-height: 300px;
+  height: 60vh !important;
+  min-height: 500px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2401,8 +2401,8 @@ body {
 .visor-preview-area {
   position: relative;
   overflow: hidden;
-  height: 30vh !important;
-  min-height: 300px;
+  height: 60vh !important;
+  min-height: 500px;
   background: var(--midnight-mid);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
