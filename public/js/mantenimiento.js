@@ -18,9 +18,13 @@ let chartEstado = null;
 
 // ─── Relevant folders for AI context ───
 const AI_CONTEXT_PATHS = [
+  { path: '01_Arquitectonico', label: 'Arquitectónico' },
   { path: '02_Estructural', label: 'Estructural' },
   { path: '03_Electricos_y_Red_de_Datos', label: 'Eléctricos y Redes' },
-  { path: '08_Registro_Fotografico', label: 'Registro Fotográfico' }
+  { path: '04_Hidrosanitarios', label: 'Hidrosanitarios' },
+  { path: '06_Documentos', label: 'Documentos' },
+  { path: '07_Matriz_Accesibilidad_NTC_6047', label: 'Accesibilidad' },
+  { path: '08_Registro_Fotografico', label: 'Fotografías' }
 ];
 
 // ─── GEMINI API KEY ───
@@ -44,7 +48,10 @@ export function getContextForAI(blockId) {
         nombre: f.nombre || f.name || 'Sin nombre',
         carpeta: label,
         tipo: f.tipo || 'desconocido',
-        fecha: f.fechaSubida || f.fecha || '--'
+        url: f.url,
+        tamaño: f.tamaño,
+        tipoMime: f.tipoMime,
+        fecha: f.fechaSubida || f.fechaCreacion || f.fecha || '--'
       });
     });
   });
@@ -70,33 +77,90 @@ async function generateAIDiagnosis(blockId, context) {
   const estado = estadoSelect?.value || 'regular';
   const fecha = fechaInput?.value || 'No registrada';
 
-  // Group files to reduce prompt size
-  const folderCounts = {};
-  context.files.forEach(f => {
-    folderCounts[f.carpeta] = (folderCounts[f.carpeta] || 0) + 1;
-  });
-  const fileSummary = Object.entries(folderCounts)
-    .map(([folder, count]) => `- ${folder}: ${count} archivo(s)`)
-    .join('\n');
+  // Actualizar UI del spinner si existe
+  const spinnerText = document.querySelector('.mant-spinner-text');
+  if (spinnerText) spinnerText.textContent = "Extrayendo y analizando contenido de documentos técnicos...";
 
-  // Add all context files metadata mapping (not just counts) to prompt
-  const fullFilesList = context.files.map(f => `- [${f.carpeta}] ${f.nombre} (${f.tipo})`).join('\n');
-
-  const promptText = `
+  const parts = [];
+  let textoEstructurado = `
 Actúa como un Auditor Técnico de Infraestructura del ISER evaluando el bloque: ${blockName}.
 Estado general reportado: ${estado.toUpperCase()}. Fecha de inspección: ${fecha}.
 Datos de construcción: Área ${blockInfo.area || '--'} m², Recintos ${blockInfo.rooms || '--'}, Sistema ${blockInfo.construction || '--'}.
-Archivos de contexto documentales detallados:
-${fullFilesList || 'Ningún archivo de respaldo encontrado.'}
 
-Tu tarea es proveer un análisis estructurado. Devuelve EXCLUSIVAMENTE un bloque JSON de formato válido, sin texto adicional fuera de él. El JSON debe tener esta estructura exacta:
+INSTRUCCIÓN ESPECIAL DE CONTENIDO:
+Analiza el contenido de estos documentos técnicos (PDF/Excel) adjuntos y las metadata de los modelos 3D. 
+No te limites a los nombres de los archivos; busca datos específicos de áreas, materiales, observaciones y cumplimiento de normas dentro de ellos. 
+Para los archivos 3D (.rvt, .dwg), evalúa la actualización de los modelos basándote en su fecha y tamaño.
+
+Documentos disponibles en el sistema:
+`;
+
+  // Helpers de Extracción
+  const fetchAsBase64 = async (url) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.readAsDataURL(blob);
+      });
+    } catch { return null; }
+  };
+
+  const extractExcel = async (url) => {
+    try {
+      const res = await fetch(url);
+      const buf = await res.arrayBuffer();
+      const wb = window.XLSX.read(buf, { type: 'array' });
+      return window.XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]).substring(0, 3000);
+    } catch { return null; }
+  };
+
+  let extractPDFsCount = 0;
+  
+  for (const f of context.files) {
+    const sizeMB = f.tamaño ? (f.tamaño / (1024 * 1024)).toFixed(2) + ' MB' : 'Desconocido';
+    const dateObj = typeof f.fecha?.toDate === 'function' ? f.fecha.toDate() : new Date(f.fecha);
+    const dateStr = !isNaN(dateObj) ? dateObj.toLocaleDateString() : f.fecha;
+    
+    textoEstructurado += `- [${f.carpeta}] ${f.nombre} (${f.tipo.toUpperCase()} | ${sizeMB} | Modif: ${dateStr})\n`;
+    
+    if (f.tipo.toUpperCase() === 'PDF' && f.url && extractPDFsCount < 3) {
+      extractPDFsCount++;
+      const b64 = await fetchAsBase64(f.url);
+      if (b64) {
+        parts.push({
+          inlineData: {
+            data: b64,
+            mimeType: "application/pdf"
+          }
+        });
+      } else {
+        textoEstructurado += `  *(Note: Fallo al extraer PDF)*\n`;
+      }
+    } else if (f.tipo.toUpperCase() === 'EXCEL' && f.url && window.XLSX) {
+      const csv = await extractExcel(f.url);
+      if (csv) {
+        textoEstructurado += `--- Contenido extraído de ${f.nombre} ---\n${csv}\n----------------------------------------\n`;
+      }
+    } else if (['RVT','DWG','SKP','IFC'].includes(f.tipo.toUpperCase())) {
+      textoEstructurado += `  *(Modelo BIM. Evaluar vigencia según fecha ${dateStr} y peso ${sizeMB})*\n`;
+    }
+  }
+
+  textoEstructurado += `
+Tu tarea es proveer un análisis estructurado. Devuelve EXCLUSIVAMENTE un bloque JSON de formato válido.
+Estructura exacta:
 {
-  "diagnostico_texto": "RESUMEN EJECUTIVO DE MANTENIMIENTO (3 o 4 párrafos). 1. Diagnóstico general. 2. Análisis de disponibilidad de documentos (ej. 'faltan planos'). 3. Recomendaciones inmediatas.",
-  "distribucion_archivos": { "Planos": X, "Fotos": Y, "Otros": Z },
+  "diagnostico_texto": "RESUMEN EJECUTIVO (3 o 4 párrafos). 1. Diagnóstico general basado en los reportes, estado y planos extraídos. 2. Análisis del CONTENIDO de los documentos extraídos. 3. Reseña técnica de los archivos 3D detectados. 4. Recomendaciones.",
+  "distribucion_archivos": { "Planos 3D": X, "Documentos PDF/Excel": Y, "Fotos": Z },
   "estado_mantenimiento": { "preventivo": "70", "correctivo": "30" }
 }
-IMPORTANTE: Asigna valores coherentes numéricos (solo números, no "%") en los objetos de distribución y estado basados en los metadatos de los archivos y tu análisis. La suma de preventivo y correctivo de estado_mantenimiento debe ser 100.
+IMPORTANTE: Asigna valores numéricos reales sin "%". La suma de preventivo y correctivo debe ser 100.
 `;
+
+  parts.unshift(textoEstructurado); // Agregar el texto como primer parte
 
   try {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -114,7 +178,7 @@ IMPORTANTE: Asigna valores coherentes numéricos (solo números, no "%") en los 
         { model: "gemini-2.5-flash" },
         { apiVersion: "v1" }
       );
-      const result = await model.generateContent(promptText);
+      const result = await model.generateContent(parts);
       return parseJSON(result.response.text());
     } catch (e1) {
       console.warn("Gemini 2.5 Flash falló, intentando fallback a 1.5-flash-latest...", e1);
@@ -124,7 +188,7 @@ IMPORTANTE: Asigna valores coherentes numéricos (solo números, no "%") en los 
         { model: "gemini-1.5-flash-latest" },
         { apiVersion: "v1" }
       );
-      const result = await fallbackModel.generateContent(promptText);
+      const result = await fallbackModel.generateContent(parts);
       return parseJSON(result.response.text());
     }
   } catch (error) {
@@ -434,6 +498,8 @@ export function initMantenimiento() {
       diagnosticoArea.value = "Error en analítica. Validación manual requerida.";
     } finally {
       spinnerOverlay.style.display = 'none';
+      const spinnerText = document.querySelector('.mant-spinner-text');
+      if (spinnerText) spinnerText.textContent = "Analizando planos y fotografías del bloque...";
       btnIA.disabled = false;
     }
   });
