@@ -5,7 +5,7 @@ import { state } from './core/state.js';
 import { on, EVENTS } from './core/events.js';
 import { getCampusData } from './campus-data.js';
 import { generarMenuPlanoteca } from './planoteca-structure.js';
-import { getPathsForFilter, getFirstFileInPath, getFilesInPath } from './services/fileMapper.js';
+import { getPathsForFilter, getFirstFileInPath, getFilesInPath, normalizeKey } from './services/fileMapper.js';
 
 import { storage } from './services/firebase.js';
 import { ref as storageRef, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
@@ -22,14 +22,7 @@ let miniVisorIndex = -1;
 let miniVisorCurrentTab = null;
 let miniVisorCurrentPath = null;
 
-function normalizeKey(s) {
-  return String(s || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, '_')
-    .replace(/[^a-zA-Z0-9_\-]/g, '')
-    .toLowerCase();
-}
+
 
 async function resolveFileUrlForPreview(file) {
   if (!file) return null;
@@ -335,7 +328,7 @@ async function renderBlockPreviewForTab(blockId, tab) {
   }
 
   // Obtener rutas de carpeta para este tab (desde fileMapper.js)
-  const paths = getPathsForFilter(tab);
+  const paths = getPathsForFilter(tab, state.currentSede || '');
 
   if (paths.length === 0) {
     if (folderContainer) folderContainer.style.display = 'none';

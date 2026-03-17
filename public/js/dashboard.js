@@ -18,7 +18,14 @@ function computeDashboardStats() {
   keys.forEach(k => { byEsp[k] = 0; });
 
   archivos.forEach(a => {
-    const carpeta = (a?.carpeta || '').split('/').filter(Boolean)[0];
+    let carpeta = (a?.carpeta || '').split('/').filter(Boolean)[0];
+    const secondFolder = (a?.carpeta || '').split('/').filter(Boolean)[1];
+
+    // Si la primera carpeta es un prefijo de sede, usar la segunda carpeta
+    if (carpeta && ['pamplona', 'rinconada', 'caldera'].includes(carpeta.toLowerCase())) {
+      carpeta = secondFolder;
+    }
+
     if (carpeta && byEsp.hasOwnProperty(carpeta)) {
       byEsp[carpeta]++;
     } else {

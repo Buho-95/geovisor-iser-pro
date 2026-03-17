@@ -1,54 +1,69 @@
 import { state } from '../core/state.js';
 
 /**
- * Normaliza strings para búsqueda ignorando tildes, mayúsculas y espacios
+ * Normaliza strings de forma más agresiva para búsqueda robusta,
+ * eliminando tildes, caracteres especiales, y colapsando espacios/guiones.
  */
 export function normalizeKey(s) {
     return String(s || '')
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/\s+/g, '_')
-        .replace(/[^a-zA-Z0-9_\-]/g, '')
-        .toLowerCase();
+        .replace(/[\u0300-\u036f]/g, '') // Elimina acentos
+        .replace(/[^a-zA-Z0-9]/g, '')    // Elimina espacios, guiones, guiones bajos... todo lo no alfanumérico
+        .toLowerCase()
+        .trim();
+}
+
+/**
+ * Construye una ruta base dependiente del contexto.
+ * @param {string} path - Ruta interna de la categoría.
+ * @param {string} [sedePrefix=''] - Prefijo opcional de la sede.
+ * @returns {string} Ruta completa.
+ */
+export function buildPath(path, sedePrefix = '') {
+    return sedePrefix ? `${sedePrefix}/${path}` : path;
 }
 
 /**
  * Obtiene las rutas de carpetas específicas para un tipo de filtro (3D, PDF, RENDERS, FOTOS)
+ * Preparado para soportar múltiples sedes dinámicamente mediante sedePrefix.
  * @param {string} filterType - '3d' | 'pdf' | 'renders' | 'img'
+ * @param {string} [sedePrefix=''] - Prefijo de la sede.
  * @returns {Array<{path: string, label: string}>}
  */
-export function getPathsForFilter(filterType) {
+export function getPathsForFilter(filterType, sedePrefix = '') {
+    const build = (path, label) => ({ path: buildPath(path, sedePrefix), label });
+
     switch (filterType) {
         case 'pdf':
             return [
-                { path: '01_Arquitectonico/03_Entregables_PDF', label: 'Arquitectónico PDF' },
-                { path: '02_Estructural/03_Entregables_PDF', label: 'Estructural PDF' },
-                { path: '03_Electricos_y_Red_de_Datos/01_Electricos/02_Entregables_PDF', label: 'Eléctricos PDF' },
-                { path: '03_Electricos_y_Red_de_Datos/02_Redes_de_Datos/02_Entregables_PDF', label: 'Redes Data PDF' },
-                { path: '04_Hidrosanitarios_y_Gas/01_Gas/03_Entregables_PDF', label: 'Gas PDF' },
-                { path: '04_Hidrosanitarios_y_Gas/02_Hidrosanitarios/03_Entregables_PDF', label: 'Hidrosanitario PDF' }
+                build('01_Arquitectonico/03_Entregables_PDF', 'Arquitectónico PDF'),
+                build('02_Estructural/03_Entregables_PDF', 'Estructural PDF'),
+                build('03_Electricos_y_Red_de_Datos/01_Electricos/02_Entregables_PDF', 'Eléctricos PDF'),
+                build('03_Electricos_y_Red_de_Datos/02_Redes_de_Datos/02_Entregables_PDF', 'Redes Data PDF'),
+                build('04_Hidrosanitarios_y_Gas/01_Gas/03_Entregables_PDF', 'Gas PDF'),
+                build('04_Hidrosanitarios_y_Gas/02_Hidrosanitarios/03_Entregables_PDF', 'Hidrosanitario PDF')
             ];
         case '3d':
             return [
-                { path: '01_Arquitectonico/02_Modelo_3D_SketchUP', label: 'Arq 3D SketchUp (.glb)' },
-                { path: '02_Estructural/02_Modelo_3D_SketchUP', label: 'Est 3D SketchUp' }
+                build('01_Arquitectonico/02_Modelo_3D_SketchUP', 'Arq 3D SketchUp (.glb)'),
+                build('02_Estructural/02_Modelo_3D_SketchUP', 'Est 3D SketchUp')
             ];
         case 'renders':
             return [
-                { path: '05_Renders_y_Presentaciones/01_Renders', label: 'Renders 3D' }
+                build('05_Renders_y_Presentaciones/01_Renders', 'Renders 3D')
             ];
         case 'img':
             return [
-                { path: '08_Registro_Fotografico/01_2025', label: 'Fotos 2025' },
-                { path: '08_Registro_Fotografico/02_2026_1', label: 'Fotos 2026 P1' }
+                build('08_Registro_Fotografico/01_2025', 'Fotos 2025'),
+                build('08_Registro_Fotografico/02_2026_1', 'Fotos 2026 P1')
             ];
         case 'docs':
             return [
-                { path: '07_Matriz_Accesibilidad_NTC_6047', label: 'Matriz Accesibilidad NTC 6047' },
-                { path: '06_Documentos/Certificados', label: 'Certificados' },
-                { path: '06_Documentos/Licencias', label: 'Licencias' },
-                { path: '06_Documentos/Actas', label: 'Actas' },
-                { path: '06_Documentos/Otros', label: 'Otros Documentos' }
+                build('07_Matriz_Accesibilidad_NTC_6047', 'Matriz Accesibilidad NTC 6047'),
+                build('06_Documentos/Certificados', 'Certificados'),
+                build('06_Documentos/Licencias', 'Licencias'),
+                build('06_Documentos/Actas', 'Actas'),
+                build('06_Documentos/Otros', 'Otros Documentos')
             ];
         default:
             return [];
@@ -79,7 +94,7 @@ export function getFilesInPath(blockId, filterPath) {
         }
     } catch { /* noop */ }
 
-    return files.filter(f => {
+    const results = files.filter(f => {
         if (!f) return false;
 
         // Match bloque by ID or display name
@@ -92,6 +107,23 @@ export function getFilesInPath(blockId, filterPath) {
         const folderPath = String(f.carpeta || '');
         return folderPath === filterPath || folderPath.startsWith(filterPath + '/');
     });
+
+    // FAT-01 Fallback: Si no hay resultados y filterPath tiene un prefijo de sede ('pamplona/'), buscar en la raíz.
+    if (results.length === 0 && filterPath.includes('/')) {
+        const fallbackPath = filterPath.split('/').slice(1).join('/');
+        return files.filter(f => {
+            if (!f) return false;
+            const fBloque = String(f.bloque || '').toLowerCase();
+            const fBloqueNorm = normalizeKey(f.bloque);
+            const bloqueMatch = validBlocks.has(fBloque) || validBlocks.has(fBloqueNorm);
+            if (!bloqueMatch) return false;
+
+            const folderPath = String(f.carpeta || '');
+            return folderPath === fallbackPath || folderPath.startsWith(fallbackPath + '/');
+        });
+    }
+
+    return results;
 }
 
 /**

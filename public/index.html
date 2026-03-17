@@ -40,6 +40,10 @@
     <!-- SheetJS for Excel/CSV rendering -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
+    <!-- jsPDF + AutoTable for PDF report generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+
     <link rel="stylesheet" href="css/styles.css">
 </head>
 
@@ -182,15 +186,34 @@
             </div>
         </header>
 
+        <!-- ═══ TOP NAVIGATION BAR ═══ -->
+        <nav id="top-nav" class="top-nav">
+            <div class="top-nav-modules">
+                <button type="button" class="top-nav-btn active" data-module="mapa">
+                    <i class="ph ph-map-trifold"></i> Mapa
+                </button>
+                <button type="button" id="nav-btn-mantenimiento" class="top-nav-btn" data-module="mantenimiento" style="display:none;">
+                    <i class="ph ph-wrench"></i> Mantenimiento
+                </button>
+                <button type="button" class="top-nav-btn" data-module="dashboard">
+                    <i class="ph ph-chart-line-up"></i> Dashboard
+                </button>
+            </div>
+            <div class="top-nav-sede">
+                <i class="ph-fill ph-buildings"></i>
+                <select id="top-nav-sede-selector" class="sede-dropdown">
+                    <option value="pamplona">Sede Central — Pamplona</option>
+                    <option value="rinconada">Granja La Rinconada</option>
+                    <option value="caldera">Finca La Caldera — Mutiscua</option>
+                </select>
+            </div>
+        </nav>
+
         <!-- Main 60/40 Grid -->
         <main class="app-main">
             <!-- ───── LEFT: Map (60%) ───── -->
             <section class="map-column">
-                <select class="map-sede-selector" id="sede-selector">
-                    <option value="pamplona">SEDE PRINCIPAL - PAMPLONA</option>
-                    <option value="rinconada">GRANJA LA RINCONADA - PAMPLONA</option>
-                    <option value="caldera">FINCA LA CALDERA - MUTISCUA</option>
-                </select>
+
                 <div id="map"></div>
                 <div class="map-coords-bar">
                     <div class="coords">
@@ -328,6 +351,76 @@
                                         Volver</button>
                                 </div>
                                 <div id="arbol-carpetas-iser"></div>
+                            </div>
+                        </div>
+
+                        <!-- MANTENIMIENTO Tab -->
+                        <div id="panel-mantenimiento" class="panel-content">
+                            <div class="mant-form-wrap">
+                                <div class="mant-header">
+                                    <i class="ph ph-wrench"></i>
+                                    <div>
+                                        <h3 class="mant-title">Inspección de Mantenimiento</h3>
+                                        <p class="mant-subtitle">Diagnóstico técnico asistido por IA</p>
+                                    </div>
+                                </div>
+
+                                <form id="mant-form" autocomplete="off">
+                                    <div class="mant-field">
+                                        <label class="mant-label" for="mant-bloque">Bloque a inspeccionar</label>
+                                        <select id="mant-bloque" class="mant-input">
+                                            <option value="">— Selecciona un bloque —</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="mant-row-2">
+                                        <div class="mant-field">
+                                            <label class="mant-label" for="mant-estado">Estado General</label>
+                                            <select id="mant-estado" class="mant-input">
+                                                <option value="optimo">✅ Óptimo</option>
+                                                <option value="regular">⚠️ Regular</option>
+                                                <option value="critico">🔴 Crítico</option>
+                                            </select>
+                                        </div>
+                                        <div class="mant-field">
+                                            <label class="mant-label" for="mant-fecha">Última Inspección</label>
+                                            <input type="date" id="mant-fecha" class="mant-input">
+                                        </div>
+                                    </div>
+
+                                    <!-- Context summary (files found) -->
+                                    <div id="mant-context-summary" class="mant-context-box" style="display:none;">
+                                        <div class="mant-context-title"><i class="ph ph-folder-open"></i> Archivos analizados</div>
+                                        <div id="mant-context-list"></div>
+                                    </div>
+
+                                    <div class="mant-field">
+                                        <label class="mant-label">Diagnóstico de la IA</label>
+                                        <textarea id="mant-diagnostico" class="mant-textarea" rows="7" readonly placeholder="Haz clic en 'Generar Diagnóstico' para que la IA analice los planos y fotografías del bloque..."></textarea>
+                                    </div>
+
+                                    <div class="mant-field">
+                                        <label class="mant-label" for="mant-recomendaciones">Recomendaciones Técnicas</label>
+                                        <textarea id="mant-recomendaciones" class="mant-textarea" rows="4" placeholder="Escribe tus observaciones adicionales aquí..."></textarea>
+                                    </div>
+
+                                    <div class="mant-actions">
+                                        <button type="button" id="mant-btn-ia" class="mant-btn mant-btn-ai" disabled>
+                                            <i class="ph ph-robot"></i> Generar Diagnóstico con IA
+                                        </button>
+                                        <button type="button" id="mant-btn-pdf" class="mant-btn mant-btn-pdf" disabled>
+                                            <i class="ph ph-file-pdf"></i> Exportar Informe PDF
+                                        </button>
+                                    </div>
+                                </form>
+
+                                <!-- AI Spinner Overlay -->
+                                <div id="mant-spinner-overlay" class="mant-spinner-overlay" style="display:none;">
+                                    <div class="mant-spinner-content">
+                                        <div class="mant-spinner-ring"></div>
+                                        <p class="mant-spinner-text">Analizando planos y fotografías del bloque...</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

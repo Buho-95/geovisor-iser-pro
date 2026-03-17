@@ -38,7 +38,13 @@ const navCounter = document.getElementById('visor-nav-counter');
 // ✅ Limpieza completa de memoria al cerrar el visor
 function cleanupViewer() {
   // Limpiar iframe
-  if (visorIframe) visorIframe.src = '';
+  if (visorIframe) {
+    visorIframe.src = '';
+    if (visorIframe.dataset.fallbackId) {
+      clearTimeout(Number(visorIframe.dataset.fallbackId));
+      delete visorIframe.dataset.fallbackId;
+    }
+  }
 
   // Limpiar visor CAD
   if (cadViewerInstance) {
@@ -157,7 +163,7 @@ async function initBimViewer(fileUrl) {
   bimContainer.classList.remove('hidden');
 }
 
-// ✅ Renderizar Excel/CSV con SheetJS
+// ✅ Renderizar Excel/CSV con SheetJS usando renderizado por fragmentos (chunks)
 async function renderExcelViewer(fileUrl, fileName) {
   const iframeEl = document.getElementById('visor-iframe');
   const msgEl = document.getElementById('visor-mensaje');
@@ -180,7 +186,8 @@ async function renderExcelViewer(fileUrl, fileName) {
     }
 
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-    const htmlTable = XLSX.utils.sheet_to_html(firstSheet, { id: 'excel-table-visor' });
+    // Convertir a JSON 2D array para poder iterarlo en chunks
+    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
     // Crear contenedor scrollable para la tabla
     const container = document.createElement('div');
@@ -204,8 +211,7 @@ async function renderExcelViewer(fileUrl, fileName) {
           text-align: left;
           white-space: nowrap;
         }
-        #excel-table-visor th,
-        #excel-table-visor tr:first-child td {
+        #excel-table-visor th {
           background: var(--cyan-dim);
           color: var(--cyan);
           font-weight: 700;
@@ -223,12 +229,59 @@ async function renderExcelViewer(fileUrl, fileName) {
           background: var(--surface-hover);
         }
       </style>
-      ${htmlTable}
+      <table id="excel-table-visor">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
     `;
 
     // Insertar en el visor body
     const visorBody = document.querySelector('.visor-body');
     if (visorBody) visorBody.appendChild(container);
+
+    const thead = container.querySelector('thead');
+    const tbody = container.querySelector('tbody');
+
+    if (jsonData.length > 0) {
+       const headerRow = document.createElement('tr');
+       jsonData[0].forEach(cell => {
+          const th = document.createElement('th');
+          th.textContent = cell !== undefined && cell !== null ? String(cell) : '';
+          headerRow.appendChild(th);
+       });
+       thead.appendChild(headerRow);
+    }
+
+    let currentRow = 1;
+    const chunkSize = 100;
+
+    function renderChunk() {
+        if (!document.getElementById('visor-excel-container')) return; // Visor cerrado
+        
+        const endRow = Math.min(currentRow + chunkSize, jsonData.length);
+        const fragment = document.createDocumentFragment();
+        
+        for (let i = currentRow; i < endRow; i++) {
+            const tr = document.createElement('tr');
+            jsonData[i].forEach(cell => {
+                const td = document.createElement('td');
+                td.textContent = cell !== undefined && cell !== null ? String(cell) : '';
+                tr.appendChild(td);
+            });
+            fragment.appendChild(tr);
+        }
+        
+        tbody.appendChild(fragment);
+        currentRow = endRow;
+        
+        if (currentRow < jsonData.length) {
+            requestAnimationFrame(renderChunk);
+        }
+    }
+    
+    if (jsonData.length > 1) {
+        requestAnimationFrame(renderChunk);
+    }
 
   } catch (error) {
     console.error('Error renderizando Excel/CSV:', error);
@@ -369,8 +422,32 @@ export async function openViewer(file) {
         iconEl.style.cssText = 'font-size:1.5rem;color:#FF6D00;'; // Orange for PPT
       }
       if (iframeEl) {
-        iframeEl.src = `https://docs.google.com/viewerng/viewer?embedded=true&url=${encodeURIComponent(file.url)}`;
+        const safeUrl = encodeURIComponent(file.url);
+        iframeEl.src = `https://docs.google.com/viewerng/viewer?embedded=true&url=${safeUrl}`;
         iframeEl.style.display = 'block';
+        currentViewerType = 'docs';
+        
+        // Timeout de 3.5s para fallback
+        const fallbackId = setTimeout(() => {
+          if (visorModal.classList.contains('activo') && currentViewerType === 'docs') {
+             if (msgEl) {
+               msgEl.classList.remove('hidden');
+               msgEl.innerHTML = `
+                  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;">
+                    <i class="ph ph-warning" style="font-size:3rem;margin-bottom:1rem;color:var(--amber);"></i>
+                    <h4 style="font-size:1.1rem;font-weight:700;">El visor en línea tarda demasiado</h4>
+                    <p style="font-size:0.85rem;margin-bottom:1.5rem;text-align:center;max-width:300px;color:var(--text-muted);">Es posible que el archivo sea muy pesado o el servicio de Google no esté disponible en este momento.</p>
+                    <a href="${file.url}" target="_blank" class="ui-button" style="background:#1976D2;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;display:flex;align-items:center;">
+                      <i class="ph ph-download-simple" style="margin-right:8px;font-size:1.2rem;"></i> Abrir / Descargar Archivo Nativo
+                    </a>
+                  </div>
+               `;
+             }
+             iframeEl.style.display = 'none';
+          }
+        }, 3500);
+        
+        iframeEl.dataset.fallbackId = fallbackId;
       }
       if (msgEl) msgEl.classList.add('hidden');
       break;
