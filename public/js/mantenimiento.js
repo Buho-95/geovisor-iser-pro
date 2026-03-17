@@ -6,12 +6,15 @@
 import { state } from './core/state.js';
 import { getCampusData } from './campus-data.js';
 import { getFilesInPath } from './services/fileMapper.js';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // ─── DOM References ───
 let formEl, bloqueSelect, estadoSelect, fechaInput;
 let diagnosticoArea, recomendacionesArea;
 let btnIA, btnPDF, spinnerOverlay;
 let contextSummary, contextList;
+let chartDist = null;
+let chartEstado = null;
 
 // ─── Relevant folders for AI context ───
 const AI_CONTEXT_PATHS = [
@@ -19,6 +22,10 @@ const AI_CONTEXT_PATHS = [
   { path: '03_Electricos_y_Red_de_Datos', label: 'Eléctricos y Redes' },
   { path: '08_Registro_Fotografico', label: 'Registro Fotográfico' }
 ];
+
+// ─── GEMINI API KEY ───
+// TODO: Pegar la API Key de Google AI Studio aquí.
+const GEMINI_API_KEY = "AIzaSyBtW6xf9FLNN7j8wwy9jpg0PUuOaz6Vz-8";
 
 /**
  * Get file context for AI analysis from specific folders.
@@ -50,50 +57,125 @@ export function getContextForAI(blockId) {
 }
 
 /**
- * Build a structured prompt for AI analysis.
+ * Generate a diagnosis using Google Gemini SDK.
  */
-function buildAIPrompt(blockId) {
+async function generateAIDiagnosis(blockId, context) {
+  if (!GEMINI_API_KEY) {
+    throw new Error('La API Key de Gemini no está configurada.');
+  }
+
   const campusData = getCampusData();
   const blockInfo = campusData?.[blockId]?.info || {};
   const blockName = campusData?.[blockId]?.name || blockId;
   const estado = estadoSelect?.value || 'regular';
   const fecha = fechaInput?.value || 'No registrada';
-  const context = getContextForAI(blockId);
 
-  let fileList = 'Ninguno disponible.';
-  if (context.files.length > 0) {
-    fileList = context.files.map(f =>
-      `- [${f.carpeta}] ${f.nombre} (${f.tipo})`
-    ).join('\n');
+  // Group files to reduce prompt size
+  const folderCounts = {};
+  context.files.forEach(f => {
+    folderCounts[f.carpeta] = (folderCounts[f.carpeta] || 0) + 1;
+  });
+  const fileSummary = Object.entries(folderCounts)
+    .map(([folder, count]) => `- ${folder}: ${count} archivo(s)`)
+    .join('\n');
+
+  // Add all context files metadata mapping (not just counts) to prompt
+  const fullFilesList = context.files.map(f => `- [${f.carpeta}] ${f.nombre} (${f.tipo})`).join('\n');
+
+  const promptText = `
+Actúa como un Auditor Técnico de Infraestructura del ISER evaluando el bloque: ${blockName}.
+Estado general reportado: ${estado.toUpperCase()}. Fecha de inspección: ${fecha}.
+Datos de construcción: Área ${blockInfo.area || '--'} m², Recintos ${blockInfo.rooms || '--'}, Sistema ${blockInfo.construction || '--'}.
+Archivos de contexto documentales detallados:
+${fullFilesList || 'Ningún archivo de respaldo encontrado.'}
+
+Tu tarea es proveer un análisis estructurado. Devuelve EXCLUSIVAMENTE un bloque JSON de formato válido, sin texto adicional fuera de él. El JSON debe tener esta estructura exacta:
+{
+  "diagnostico_texto": "RESUMEN EJECUTIVO DE MANTENIMIENTO (3 o 4 párrafos). 1. Diagnóstico general. 2. Análisis de disponibilidad de documentos (ej. 'faltan planos'). 3. Recomendaciones inmediatas.",
+  "distribucion_archivos": { "Planos": X, "Fotos": Y, "Otros": Z },
+  "estado_mantenimiento": { "preventivo": "70", "correctivo": "30" }
+}
+IMPORTANTE: Asigna valores coherentes numéricos (solo números, no "%") en los objetos de distribución y estado basados en los metadatos de los archivos y tu análisis. La suma de preventivo y correctivo de estado_mantenimiento debe ser 100.
+`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    
+    // Parse response
+    const parseJSON = (text) => {
+      const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```\n([\s\S]*?)\n```/);
+      const jsonStr = jsonMatch ? jsonMatch[1] : text;
+      return JSON.parse(jsonStr.trim());
+    };
+
+    // Intento 1: Modelo más reciente (Gemini 2.5 Flash)
+    try {
+      const model = genAI.getGenerativeModel(
+        { model: "gemini-2.5-flash" },
+        { apiVersion: "v1" }
+      );
+      const result = await model.generateContent(promptText);
+      return parseJSON(result.response.text());
+    } catch (e1) {
+      console.warn("Gemini 2.5 Flash falló, intentando fallback a 1.5-flash-latest...", e1);
+      
+      // Intento 2: Fallback al modelo 1.5 Flash Latest
+      const fallbackModel = genAI.getGenerativeModel(
+        { model: "gemini-1.5-flash-latest" },
+        { apiVersion: "v1" }
+      );
+      const result = await fallbackModel.generateContent(promptText);
+      return parseJSON(result.response.text());
+    }
+  } catch (error) {
+    console.error("Gemini SDK Error Final:", error);
+    throw new Error("Error procesando analítica predictiva. Revisa consola.");
+  }
+}
+
+/**
+ * Render Chart.js graphs based on Gemini JSON analytics
+ */
+function renderMantCharts(data) {
+  const container = document.getElementById('mant-charts-container');
+  if (!data || !data.distribucion_archivos || !data.estado_mantenimiento) {
+    if (container) container.style.display = 'none';
+    return;
+  }
+  if (container) container.style.display = 'block';
+
+  const ctxDist = document.getElementById('mant-chart-dist');
+  if (chartDist) chartDist.destroy();
+  if (ctxDist) {
+    chartDist = new Chart(ctxDist, {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(data.distribucion_archivos),
+        datasets: [{
+          data: Object.values(data.distribucion_archivos),
+          backgroundColor: ['#2E7D32', '#1976D2', '#D32F2F', '#F9A825', '#00ACC1']
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Distribución Analítica Doc.' } } }
+    });
   }
 
-  return `DIAGNÓSTICO TÉCNICO DE MANTENIMIENTO — ${blockName}
-══════════════════════════════════════════════
-
-DATOS DEL BLOQUE:
-• Nombre: ${blockName}
-• Área: ${blockInfo.area || '--'} m²
-• Recintos: ${blockInfo.rooms || '--'}
-• Sistema Constructivo: ${blockInfo.construction || '--'}
-• Cubierta: ${blockInfo.roof || '--'}
-• Estado General Reportado: ${estado.toUpperCase()}
-• Última Inspección: ${fecha}
-
-ARCHIVOS CONSULTADOS (${context.files.length}):
-${fileList}
-
-═══ DIAGNÓSTICO GENERADO ═══
-
-Basado en el análisis de la documentación técnica disponible para ${blockName}:
-
-1. ESTADO ESTRUCTURAL: ${estado === 'critico' ? 'Se detectan condiciones que requieren intervención inmediata. Los planos estructurales disponibles indican que es necesario realizar una evaluación de patologías en elementos portantes.' : estado === 'regular' ? 'El bloque presenta desgaste normal para su antigüedad. Se recomienda programar mantenimiento preventivo en las áreas identificadas.' : 'La edificación se encuentra en condiciones óptimas de servicio. Se recomienda continuar con el plan de mantenimiento preventivo establecido.'}
-
-2. INSTALACIONES ELÉCTRICAS: ${context.files.some(f => f.carpeta.includes('Eléctric')) ? 'Se cuenta con documentación eléctrica actualizada. Se recomienda verificar el estado de tableros y acometidas según los planos registrados.' : 'No se encontraron planos eléctricos en el sistema. Se recomienda realizar un levantamiento eléctrico completo.'}
-
-3. REGISTRO FOTOGRÁFICO: ${context.files.some(f => f.carpeta.includes('Fotográfico')) ? `Se dispone de ${context.files.filter(f => f.carpeta.includes('Fotográfico')).length} fotografía(s) de referencia para comparación visual del estado actual vs. registros previos.` : 'No se encontraron fotografías de referencia. Se recomienda realizar un registro fotográfico completo del bloque.'}
-
-4. RECOMENDACIONES PRIORITARIAS:
-   ${estado === 'critico' ? '⚠️ URGENTE: Programar inspección presencial en las próximas 48 horas.\n   • Evaluar integridad de elementos portantes.\n   • Verificar estado de instalaciones eléctricas.\n   • Documentar con fotografías todas las patologías encontradas.' : '• Continuar con el cronograma de mantenimiento preventivo.\n   • Actualizar el registro fotográfico del bloque.\n   • Verificar vigencia de certificaciones técnicas.'}`;
+  const ctxEst = document.getElementById('mant-chart-estado');
+  if (chartEstado) chartEstado.destroy();
+  if (ctxEst) {
+    chartEstado = new Chart(ctxEst, {
+      type: 'bar',
+      data: {
+        labels: Object.keys(data.estado_mantenimiento),
+        datasets: [{
+          label: '%',
+          data: Object.values(data.estado_mantenimiento),
+          backgroundColor: ['#1976D2', '#D32F2F']
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Probabilidad Mantenimiento' }, legend: {display: false} } }
+    });
+  }
 }
 
 /**
@@ -184,8 +266,37 @@ function exportarInformeOficial() {
   const splitDiag = doc.splitTextToSize(diagText, 180);
   doc.text(splitDiag, 14, infoY + 40);
 
+  let currentY = infoY + 42 + (splitDiag.length * 4);
+
+  // ── Charts (Analítica) ──
+  const chartContainer = document.getElementById('mant-charts-container');
+  if (chartContainer && chartContainer.style.display !== 'none') {
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Analítica Predictiva', 14, currentY);
+
+    const canvasDist = document.getElementById('mant-chart-dist');
+    const canvasEst = document.getElementById('mant-chart-estado');
+    let hasCharts = false;
+
+    if (canvasDist) {
+      const imgDist = canvasDist.toDataURL('image/png', 1.0);
+      doc.addImage(imgDist, 'PNG', 14, currentY + 6, 80, 50);
+      hasCharts = true;
+    }
+    if (canvasEst) {
+      const imgEst = canvasEst.toDataURL('image/png', 1.0);
+      doc.addImage(imgEst, 'PNG', 104, currentY + 6, 80, 50);
+      hasCharts = true;
+    }
+
+    if (hasCharts) {
+      currentY += 66; // 6 + 50 + 10 padding
+    }
+  }
+
   // ── Recomendaciones ──
-  const recoY = infoY + 42 + (splitDiag.length * 4);
+  const recoY = currentY;
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text('Recomendaciones Técnicas', 14, recoY);
@@ -196,31 +307,39 @@ function exportarInformeOficial() {
   const splitReco = doc.splitTextToSize(recoText, 180);
   doc.text(splitReco, 14, recoY + 8);
 
-  // ── File Table ──
+  // ── File Table (Summary Format) ──
   if (context.files.length > 0) {
     const tableY = recoY + 12 + (splitReco.length * 4);
 
+    // Group files by folder
+    const folderGroups = {};
+    context.files.forEach(f => {
+      if (!folderGroups[f.carpeta]) folderGroups[f.carpeta] = [];
+      folderGroups[f.carpeta].push(f);
+    });
+
+    const tableData = [];
+    Object.entries(folderGroups).forEach(([folder, files]) => {
+      const count = files.length;
+      if (count < 5) {
+        // Less than 5 files: list them individually
+        tableData.push([{ content: folder, rowSpan: count }, files[0].nombre, 'Disponible']);
+        for (let i = 1; i < count; i++) {
+          tableData.push([files[i].nombre, 'Disponible']);
+        }
+      } else {
+        // 5 or more files: summarize
+        tableData.push([folder, `${count} archivo(s) en total`, 'Completo']);
+      }
+    });
+
     doc.autoTable({
       startY: tableY,
-      head: [['#', 'Archivo', 'Carpeta', 'Tipo']],
-      body: context.files.map((f, i) => [
-        i + 1,
-        f.nombre,
-        f.carpeta,
-        f.tipo
-      ]),
-      styles: {
-        fontSize: 8,
-        cellPadding: 3
-      },
-      headStyles: {
-        fillColor: [46, 125, 50],
-        textColor: 255,
-        fontStyle: 'bold'
-      },
-      alternateRowStyles: {
-        fillColor: [240, 248, 240]
-      },
+      head: [['Categoría / Carpeta', 'Documentación', 'Estado Info']],
+      body: tableData,
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [46, 125, 50], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [240, 248, 240] },
       margin: { left: 14, right: 14 }
     });
   }
@@ -288,25 +407,35 @@ export function initMantenimiento() {
     } else {
       contextSummary.style.display = 'none';
     }
+    renderMantCharts(null); // Clear charts on change
   });
 
   // ── Generate AI Diagnosis ──
-  btnIA.addEventListener('click', () => {
+  btnIA.addEventListener('click', async () => {
     const blockId = bloqueSelect.value;
     if (!blockId) return;
 
-    // Show spinner overlay
+    if (!GEMINI_API_KEY) {
+      alert("Atención: Debes configurar la API_KEY de Gemini en mantenimiento.js para generar sugerencias reales.");
+      return;
+    }
+
     spinnerOverlay.style.display = 'flex';
     btnIA.disabled = true;
 
-    // Simulate AI processing time (1.5-3s)
-    const delay = 1500 + Math.random() * 1500;
-    setTimeout(() => {
-      const diagnosis = buildAIPrompt(blockId);
-      diagnosticoArea.value = diagnosis;
+    try {
+      const context = getContextForAI(blockId);
+      const diagnosisData = await generateAIDiagnosis(blockId, context);
+      
+      diagnosticoArea.value = diagnosisData.diagnostico_texto || "No se generó texto de diagnóstico.";
+      renderMantCharts(diagnosisData);
+    } catch (e) {
+      alert(e.message || "Ocurrió un error generando el diagnóstico.");
+      diagnosticoArea.value = "Error en analítica. Validación manual requerida.";
+    } finally {
       spinnerOverlay.style.display = 'none';
       btnIA.disabled = false;
-    }, delay);
+    }
   });
 
   // ── Export PDF ──

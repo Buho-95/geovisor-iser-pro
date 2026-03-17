@@ -26,7 +26,8 @@
       {
         "imports": {
           "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
-          "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+          "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/",
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
         }
       }
     </script>
@@ -399,6 +400,18 @@
                                         <textarea id="mant-diagnostico" class="mant-textarea" rows="7" readonly placeholder="Haz clic en 'Generar Diagnóstico' para que la IA analice los planos y fotografías del bloque..."></textarea>
                                     </div>
 
+                                    <div class="mant-field" id="mant-charts-container" style="display:none;">
+                                        <label class="mant-label">Analítica Predictiva</label>
+                                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; background: var(--bg-glass); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                                            <div style="position: relative; height: 200px;">
+                                                <canvas id="mant-chart-dist"></canvas>
+                                            </div>
+                                            <div style="position: relative; height: 200px;">
+                                                <canvas id="mant-chart-estado"></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div class="mant-field">
                                         <label class="mant-label" for="mant-recomendaciones">Recomendaciones Técnicas</label>
                                         <textarea id="mant-recomendaciones" class="mant-textarea" rows="4" placeholder="Escribe tus observaciones adicionales aquí..."></textarea>
@@ -672,6 +685,7 @@
         crossorigin="anonymous"></script>
     <script type="module" src="js/main.js"></script>
     <script type="module" src="js/planoteca-structure.js"></script>
+    <script type="module" src="js/mantenimiento.js"></script>
 </body>
 
 </html>
