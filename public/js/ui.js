@@ -235,7 +235,7 @@ async function renderBlockPdfPreview(container, file) {
   iframe.style.width = '100%';
   iframe.style.height = '100%';
   iframe.style.border = '0';
-  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
+  iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
   iframe.setAttribute('referrerpolicy', 'no-referrer');
   iframe.loading = 'lazy';
   iframe.onload = () => { };

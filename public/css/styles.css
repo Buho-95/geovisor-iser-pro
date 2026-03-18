@@ -75,6 +75,51 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ───── Visitor Mode Rules ───── */
+body.visitor-mode .admin-only {
+  display: none !important;
+}
+
+body.visitor-mode .admin-readonly {
+  pointer-events: none;
+  opacity: 0.8;
+  filter: grayscale(0.5);
+}
+
+/* REGLA DE ORO DE SEGURIDAD (CORRECCIÓN): Mapa Siempre Activo */
+#map,
+#map *,
+canvas,
+.leaflet-container,
+#visor-3d-canvas {
+  pointer-events: auto !important;
+}
+
+body:not(.visitor-mode) #map,
+body:not(.visitor-mode) #map *,
+body:not(.visitor-mode) canvas,
+body:not(.visitor-mode) .leaflet-container {
+  pointer-events: auto !important;
+}
+
+/* Forzar visibilidad del contenedor 3D para evitar interferencias de capas */
+#viewer-container,
+.visor-preview-area:not(:empty),
+#visor-glb-container,
+#block-preview-container {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 10;
+}
+
+/* CSS DE EMERGENCIA - ORDEN DE RESCATE */
+canvas { 
+  pointer-events: auto !important; 
+  position: relative !important; 
+  z-index: 1 !important; 
+}
+
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -2943,6 +2988,11 @@ body {
 .mant-input:focus {
   border-color: var(--cyan);
   box-shadow: 0 0 0 3px var(--cyan-dim);
+}
+
+.mant-input option {
+  background-color: var(--midnight);
+  color: var(--text-primary);
 }
 
 .mant-row-2 {

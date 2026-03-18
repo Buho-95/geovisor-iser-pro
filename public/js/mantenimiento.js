@@ -3,10 +3,13 @@
  * Recopila contexto de archivos, genera diagnósticos simulados,
  * y exporta informes oficiales en PDF con jsPDF.
  */
-import { state } from './core/state.js';
+import { state, setCurrentBlock } from './core/state.js';
 import { getCampusData } from './campus-data.js';
+import { storage } from './services/firebase.js';
 import { getFilesInPath } from './services/fileMapper.js';
+import { guardarEstadoBloque } from './services/firestore.js';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { on, EVENTS } from './core/events.js';
 
 // ─── DOM References ───
 let formEl, bloqueSelect, estadoSelect, fechaInput;
@@ -36,7 +39,7 @@ const GEMINI_API_KEY = "AIzaSyBtW6xf9FLNN7j8wwy9jpg0PUuOaz6Vz-8";
  * @param {string} blockId
  * @returns {{ files: Array, summary: string }}
  */
-export function getContextForAI(blockId) {
+function getContextForAI(blockId) {
   const campusData = getCampusData();
   const blockName = campusData?.[blockId]?.name || blockId;
   const allContextFiles = [];
@@ -117,14 +120,25 @@ Documentos disponibles en el sistema:
     } catch { return null; }
   };
 
+  // ── Multi-Norm Audit Flags ──
+  let hasElectrico = false;
+  let hasRedes = false;
+  let hasArquitectura = false;
+
   let extractPDFsCount = 0;
   
   for (const f of context.files) {
     const sizeMB = f.tamaño ? (f.tamaño / (1024 * 1024)).toFixed(2) + ' MB' : 'Desconocido';
     const dateObj = typeof f.fecha?.toDate === 'function' ? f.fecha.toDate() : new Date(f.fecha);
     const dateStr = !isNaN(dateObj) ? dateObj.toLocaleDateString() : f.fecha;
+    const fNameUpper = f.nombre.toUpperCase();
     
     textoEstructurado += `- [${f.carpeta}] ${f.nombre} (${f.tipo.toUpperCase()} | ${sizeMB} | Modif: ${dateStr})\n`;
+    
+    // Check for audit categories
+    if (fNameUpper.includes('ELEC_') || f.carpeta === 'Eléctricos y Redes') hasElectrico = true;
+    if (fNameUpper.includes('DATA_') || fNameUpper.includes('RED') || f.carpeta === 'Eléctricos y Redes') hasRedes = true;
+    if (f.carpeta === 'Arquitectónico' || f.carpeta === 'Estructural') hasArquitectura = true;
     
     if (f.tipo.toUpperCase() === 'PDF' && f.url && extractPDFsCount < 3) {
       extractPDFsCount++;
@@ -147,17 +161,37 @@ Documentos disponibles en el sistema:
     } else if (['RVT','DWG','SKP','IFC'].includes(f.tipo.toUpperCase())) {
       textoEstructurado += `  *(Modelo BIM. Evaluar vigencia según fecha ${dateStr} y peso ${sizeMB})*\n`;
     }
-  }
+  } // <-- FIX: Cierra el for loop
 
   textoEstructurado += `
-Tu tarea es proveer un análisis estructurado. Devuelve EXCLUSIVAMENTE un bloque JSON de formato válido.
-Estructura exacta:
+Tu tarea es proveer un análisis estructurado actuando como un Auditor Senior de Infraestructura y Obras Civiles en Colombia. 
+Debes entregar la respuesta EXACTAMENTE en el formato solicitado, usando las etiquetas [TEXTO] y [JSON_DATA].
+
+REGLAS DE AUDITORÍA MULTINORMA:
+1. Documentos con prefijo MATRIZ_: Revisa al detalle la matriz Excel NTC 6047. ES OBLIGATORIO BUSCAR MEDIDAS explícitas (ej: puertas o pasadizos < 90cm). Si encuentras medidas < 90cm, reporta explícitamente el incumplimiento de la NTC 6047.
+2. ${hasElectrico ? "Documentos con prefijo ELEC_: Revisar normatividad RETIE en detalle y mencionar si cumple." : "ALERTA LEGAL: Falta documentación para validar normatividad eléctrica (RETIE)."}
+3. ${hasRedes ? "Documentos con prefijo DATA_: Revisar normatividad RITEL en detalle y mencionar si cumple." : "ALERTA LEGAL: Falta documentación para validar normatividad de telecomunicaciones (RITEL)."}
+4. ${hasArquitectura ? "Documentos con prefijo ARQ_: Revisar normatividad NSR-10 (Títulos J, K y estructural)." : "ALERTA LEGAL: Falta documentación para validar normatividad NSR-10."}
+
+FORMATO REQUERIDO:
+
+[TEXTO]
+(Redacta un Informe Técnico Profesional narrativo de 3 a 4 párrafos evaluando la NTC 6047, NSR-10, RETIE y RITEL según aplique comparando con los datos extraídos. Si falta documentación, incluye explícitamente el texto de ALERTA LEGAL indicado arriba. Cita las normas explícitamente. No uses comillas ni bloques de código.)
+
+[JSON_DATA]
 {
-  "diagnostico_texto": "RESUMEN EJECUTIVO (3 o 4 párrafos). 1. Diagnóstico general basado en los reportes, estado y planos extraídos. 2. Análisis del CONTENIDO de los documentos extraídos. 3. Reseña técnica de los archivos 3D detectados. 4. Recomendaciones.",
-  "distribucion_archivos": { "Planos 3D": X, "Documentos PDF/Excel": Y, "Fotos": Z },
-  "estado_mantenimiento": { "preventivo": "70", "correctivo": "30" }
+  "score_accesibilidad": XX,
+  "score_infraestructura": YY,
+  "color_sugerido": "#HEX",
+  "radar_scores": {
+    "Accesibilidad": 0,
+    "Eléctrico": 0,
+    "Redes": 0,
+    "Estructura": 0,
+    "Documentación": 0
+  }
 }
-IMPORTANTE: Asigna valores numéricos reales sin "%". La suma de preventivo y correctivo debe ser 100.
+IMPORTANTE PARA EL JSON: Asigna valores numéricos reales (0-100) en todos los scores y en TODAS las 5 claves de \`radar_scores\`. El 'color_sugerido' DEBE SER: Verde (#10B981) si el promedio es > 85%, Amarillo (#F59E0B) si es 60-85%, y Rojo (#EF4444) si es < 60%.
 `;
 
   parts.unshift(textoEstructurado); // Agregar el texto como primer parte
@@ -165,11 +199,37 @@ IMPORTANTE: Asigna valores numéricos reales sin "%". La suma de preventivo y co
   try {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     
-    // Parse response
-    const parseJSON = (text) => {
-      const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```\n([\s\S]*?)\n```/);
-      const jsonStr = jsonMatch ? jsonMatch[1] : text;
-      return JSON.parse(jsonStr.trim());
+    // Parse response robustly using [TEXTO] and [INICIO_DATOS]
+    const parseResponse = (text) => {
+      let narrative = text; // MUESTRA TODO EL TEXTO por defecto si el parser falla
+      let jsonStr = "{}";
+
+      const textIndex = text.indexOf('[TEXTO]');
+      const dataIndex = text.indexOf('[JSON_DATA]');
+
+      if (textIndex !== -1 && dataIndex !== -1 && textIndex < dataIndex) {
+        narrative = text.substring(textIndex + '[TEXTO]'.length, dataIndex).trim();
+        jsonStr = text.substring(dataIndex + '[JSON_DATA]'.length).trim();
+      } else if (dataIndex !== -1) {
+        narrative = text.substring(0, dataIndex).trim();
+        jsonStr = text.substring(dataIndex + '[JSON_DATA]'.length).trim();
+      }
+
+      // Cleanup JSON string in case it has markdown ticks
+      const jsonMatch = jsonStr.match(/```json\n([\s\S]*?)\n```/) || jsonStr.match(/```\n([\s\S]*?)\n```/);
+      const cleanJsonStr = jsonMatch ? jsonMatch[1] : jsonStr;
+      
+      let parsedJson = {};
+      try {
+        parsedJson = JSON.parse(cleanJsonStr);
+      } catch(e) {
+        console.warn("Fallo al parsear JSON devuelto por Gemini:", e, cleanJsonStr);
+      }
+      // Aseguramos que el diagnóstico nunca salga vacío
+      if (!narrative || narrative.trim() === '') {
+        narrative = text; // Si falló al sacar el texto, devolvemos todo el raw
+      }
+      return { diagnostico_texto: narrative, ...parsedJson };
     };
 
     // Intento 1: Modelo más reciente (Gemini 2.5 Flash)
@@ -179,7 +239,7 @@ IMPORTANTE: Asigna valores numéricos reales sin "%". La suma de preventivo y co
         { apiVersion: "v1" }
       );
       const result = await model.generateContent(parts);
-      return parseJSON(result.response.text());
+      return parseResponse(result.response.text());
     } catch (e1) {
       console.warn("Gemini 2.5 Flash falló, intentando fallback a 1.5-flash-latest...", e1);
       
@@ -189,7 +249,7 @@ IMPORTANTE: Asigna valores numéricos reales sin "%". La suma de preventivo y co
         { apiVersion: "v1" }
       );
       const result = await fallbackModel.generateContent(parts);
-      return parseJSON(result.response.text());
+      return parseResponse(result.response.text());
     }
   } catch (error) {
     console.error("Gemini SDK Error Final:", error);
@@ -202,42 +262,46 @@ IMPORTANTE: Asigna valores numéricos reales sin "%". La suma de preventivo y co
  */
 function renderMantCharts(data) {
   const container = document.getElementById('mant-charts-container');
-  if (!data || !data.distribucion_archivos || !data.estado_mantenimiento) {
+  if (!data || !data.radar_scores) {
     if (container) container.style.display = 'none';
     return;
   }
   if (container) container.style.display = 'block';
 
-  const ctxDist = document.getElementById('mant-chart-dist');
+  const ctxRadar = document.getElementById('mant-chart-radar');
   if (chartDist) chartDist.destroy();
-  if (ctxDist) {
-    chartDist = new Chart(ctxDist, {
-      type: 'doughnut',
+  if (ctxRadar) {
+    chartDist = new Chart(ctxRadar, {
+      type: 'radar',
       data: {
-        labels: Object.keys(data.distribucion_archivos),
+        labels: Object.keys(data.radar_scores),
         datasets: [{
-          data: Object.values(data.distribucion_archivos),
-          backgroundColor: ['#2E7D32', '#1976D2', '#D32F2F', '#F9A825', '#00ACC1']
+          label: 'Score Técnico',
+          data: Object.values(data.radar_scores),
+          backgroundColor: 'rgba(16, 185, 129, 0.2)', // Green tinted for branding
+          borderColor: 'rgba(16, 185, 129, 1)',
+          pointBackgroundColor: 'rgba(16, 185, 129, 1)',
+          pointBorderColor: '#fff',
+          pointHoverBackgroundColor: '#fff',
+          pointHoverBorderColor: 'rgba(16, 185, 129, 1)'
         }]
       },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Distribución Analítica Doc.' } } }
-    });
-  }
-
-  const ctxEst = document.getElementById('mant-chart-estado');
-  if (chartEstado) chartEstado.destroy();
-  if (ctxEst) {
-    chartEstado = new Chart(ctxEst, {
-      type: 'bar',
-      data: {
-        labels: Object.keys(data.estado_mantenimiento),
-        datasets: [{
-          label: '%',
-          data: Object.values(data.estado_mantenimiento),
-          backgroundColor: ['#1976D2', '#D32F2F']
-        }]
-      },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Probabilidad Mantenimiento' }, legend: {display: false} } }
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          r: {
+            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+            pointLabels: { color: 'rgba(255, 255, 255, 0.8)', font: { size: 12, family: 'Inter' } },
+            ticks: { display: false, min: 0, max: 100 }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Evaluación Técnica de Infraestructura', color: 'rgba(255, 255, 255, 0.9)' }
+        }
+      }
     });
   }
 }
@@ -283,13 +347,17 @@ function exportarInformeOficial() {
   }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-  const blockId = bloqueSelect.value;
+  const currentBloqueSelect = document.getElementById('mant-bloque');
+  const currentEstadoSelect = document.getElementById('mant-estado');
+  const currentFechaInput = document.getElementById('mant-fecha');
+
+  const blockId = currentBloqueSelect ? currentBloqueSelect.value : '';
   const campusData = getCampusData();
   const blockName = campusData?.[blockId]?.name || blockId;
   const blockInfo = campusData?.[blockId]?.info || {};
   const context = getContextForAI(blockId);
-  const estado = estadoSelect?.value || '';
-  const fecha = fechaInput?.value || 'No registrada';
+  const estado = currentEstadoSelect ? currentEstadoSelect.value : '';
+  const fecha = currentFechaInput ? currentFechaInput.value : 'No registrada';
 
   // ── Header ──
   doc.setFillColor(46, 125, 50);
@@ -326,8 +394,10 @@ function exportarInformeOficial() {
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  const diagText = diagnosticoArea?.value || 'Sin diagnóstico generado.';
-  const splitDiag = doc.splitTextToSize(diagText, 180);
+  const currentDiagnosticoArea = document.getElementById('mant-diagnostico');
+  const diagText = currentDiagnosticoArea?.value || 'Sin diagnóstico generado.';
+  const diagLines = diagText.split('\n');
+  const splitDiag = doc.splitTextToSize(diagLines, 180);
   doc.text(splitDiag, 14, infoY + 40);
 
   let currentY = infoY + 42 + (splitDiag.length * 4);
@@ -337,25 +407,37 @@ function exportarInformeOficial() {
   if (chartContainer && chartContainer.style.display !== 'none') {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Analítica Predictiva', 14, currentY);
+    doc.text('Analítica Predictiva (Radar NTC 6047)', 14, currentY);
 
-    const canvasDist = document.getElementById('mant-chart-dist');
-    const canvasEst = document.getElementById('mant-chart-estado');
+    const canvasRadar = document.getElementById('mant-chart-radar');
     let hasCharts = false;
 
-    if (canvasDist) {
-      const imgDist = canvasDist.toDataURL('image/png', 1.0);
-      doc.addImage(imgDist, 'PNG', 14, currentY + 6, 80, 50);
-      hasCharts = true;
-    }
-    if (canvasEst) {
-      const imgEst = canvasEst.toDataURL('image/png', 1.0);
-      doc.addImage(imgEst, 'PNG', 104, currentY + 6, 80, 50);
+    if (canvasRadar) {
+      // Create a temporary high-res canvas
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      const scaleFactor = 3; // Increase resolution by 3x
+      
+      tempCanvas.width = canvasRadar.width * scaleFactor;
+      tempCanvas.height = canvasRadar.height * scaleFactor;
+      tempCtx.scale(scaleFactor, scaleFactor);
+      
+      // Fill with solid background so text is readable
+      tempCtx.fillStyle = '#111827'; // var(--midnight)
+      tempCtx.fillRect(0, 0, canvasRadar.width, canvasRadar.height);
+      tempCtx.drawImage(canvasRadar, 0, 0);
+
+      const imgRadar = tempCanvas.toDataURL('image/png', 1.0);
+      
+      // Center the radar image roughly (assuming 80x80 size in PDF)
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const imgWidth = 100;
+      doc.addImage(imgRadar, 'PNG', (pageWidth - imgWidth) / 2, currentY + 6, imgWidth, imgWidth);
       hasCharts = true;
     }
 
     if (hasCharts) {
-      currentY += 66; // 6 + 50 + 10 padding
+      currentY += 116; // 6 + 100 + 10 padding
     }
   }
 
@@ -367,8 +449,10 @@ function exportarInformeOficial() {
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  const recoText = recomendacionesArea?.value || 'Sin recomendaciones adicionales.';
-  const splitReco = doc.splitTextToSize(recoText, 180);
+  const currentRecomendacionesArea = document.getElementById('mant-recomendaciones');
+  const recoText = currentRecomendacionesArea?.value || 'Sin recomendaciones adicionales.';
+  const recoLines = recoText.split('\n');
+  const splitReco = doc.splitTextToSize(recoLines, 180);
   doc.text(splitReco, 14, recoY + 8);
 
   // ── File Table (Summary Format) ──
@@ -427,7 +511,7 @@ function exportarInformeOficial() {
 /**
  * Initialize the Mantenimiento module.
  */
-export function initMantenimiento() {
+function initMantenimiento() {
   formEl = document.getElementById('mant-form');
   bloqueSelect = document.getElementById('mant-bloque');
   estadoSelect = document.getElementById('mant-estado');
@@ -442,15 +526,24 @@ export function initMantenimiento() {
 
   if (!bloqueSelect) return;
 
-  // Populate block selector from campus data
-  const campusData = getCampusData();
-  if (campusData) {
-    Object.entries(campusData).forEach(([id, data]) => {
+  try {
+    // Populate block selector from campus data
+    const campusData = getCampusData();
+    if (campusData && Object.keys(campusData).length > 0) {
+      Object.entries(campusData).forEach(([id, data]) => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = data.name || id;
+        bloqueSelect.appendChild(opt);
+      });
+    } else {
       const opt = document.createElement('option');
-      opt.value = id;
-      opt.textContent = data.name || id;
+      opt.textContent = "Error: campusData está vacío";
       bloqueSelect.appendChild(opt);
-    });
+    }
+  } catch (err) {
+    console.error("Error poblando bloques en Mantenimiento:", err);
+    bloqueSelect.innerHTML = `<option value="">Error interno: ${err.message}</option>`;
   }
 
   // Set today's date as default
@@ -466,17 +559,54 @@ export function initMantenimiento() {
     btnPDF.disabled = !hasBlock;
     diagnosticoArea.value = '';
 
+    // FORCE MAP CENTER (Reverse Sync)
+    if (hasBlock && state.currentBlockId !== blockId) {
+      setCurrentBlock(blockId);
+    }
+
     if (hasBlock) {
       renderContextSummary(blockId);
+
+      const existingState = state.estadosBloques?.[blockId];
+      if (existingState) {
+        diagnosticoArea.value = existingState.diagnostico_texto || '';
+        renderMantCharts({ radar_scores: existingState.radar_scores });
+      } else {
+        renderMantCharts(null);
+      }
     } else {
       contextSummary.style.display = 'none';
+      renderMantCharts(null); // Clear charts on change
     }
-    renderMantCharts(null); // Clear charts on change
+  });
+
+  // Sync with global block selection
+  on(EVENTS.BLOCK_SELECTED, (id) => {
+    if (bloqueSelect && id && bloqueSelect.value !== id) {
+      bloqueSelect.value = id;
+      bloqueSelect.dispatchEvent(new Event('change'));
+    }
+  });
+
+  // Real-time updates from Firestore
+  on('ESTADOS_BLOQUES_CHANGED', () => {
+    if (bloqueSelect && bloqueSelect.value) {
+      bloqueSelect.dispatchEvent(new Event('change'));
+    }
   });
 
   // ── Generate AI Diagnosis ──
-  btnIA.addEventListener('click', async () => {
-    const blockId = bloqueSelect.value;
+  document.addEventListener('click', async (e) => {
+    const targetBtnIA = e.target.closest('#mant-btn-ia');
+    if (!targetBtnIA) return;
+    e.preventDefault();
+
+    // Re-query in case the DOM was rebuilt
+    const currentBloqueSelect = document.getElementById('mant-bloque');
+    const currentDiagnosticoArea = document.getElementById('mant-diagnostico');
+    const currentSpinnerOverlay = document.getElementById('mant-spinner-overlay');
+
+    const blockId = currentBloqueSelect ? currentBloqueSelect.value : null;
     if (!blockId) return;
 
     if (!GEMINI_API_KEY) {
@@ -484,32 +614,65 @@ export function initMantenimiento() {
       return;
     }
 
-    spinnerOverlay.style.display = 'flex';
-    btnIA.disabled = true;
+    if (currentSpinnerOverlay) currentSpinnerOverlay.style.display = 'flex';
+    targetBtnIA.disabled = true;
+    
+    // UI Feedback requested by user
+    if (currentDiagnosticoArea) {
+      currentDiagnosticoArea.value = "⏳ Analizando documentos bajo NSR-10, RETIE y NTC 6047... Por favor, espera.";
+    }
 
     try {
       const context = getContextForAI(blockId);
       const diagnosisData = await generateAIDiagnosis(blockId, context);
       
-      diagnosticoArea.value = diagnosisData.diagnostico_texto || "No se generó texto de diagnóstico.";
+      if (currentDiagnosticoArea) {
+        currentDiagnosticoArea.value = diagnosisData.diagnostico_texto || "No se generó texto de diagnóstico.";
+      }
       renderMantCharts(diagnosisData);
-    } catch (e) {
-      alert(e.message || "Ocurrió un error generando el diagnóstico.");
-      diagnosticoArea.value = "Error en analítica. Validación manual requerida.";
+
+      // Guardar el estado y color en Firestore
+      try {
+        await guardarEstadoBloque(blockId, {
+          diagnostico_texto: diagnosisData.diagnostico_texto || "No se generó texto de diagnóstico.",
+          score_accesibilidad: diagnosisData.score_accesibilidad,
+          score_infraestructura: diagnosisData.score_infraestructura,
+          color_sugerido: diagnosisData.color_sugerido,
+          radar_scores: diagnosisData.radar_scores,
+          timestamp: Date.now()
+        });
+        console.log("Estado de bloque sincronizado en Firestore correctamente.");
+      } catch (err) {
+        console.error("No se pudo guardar el estado en Firestore:", err);
+      }
+    } catch (errApi) {
+      console.error("Gemini Execution Error:", errApi);
+      // Explicit error rendering requested
+      if (currentDiagnosticoArea) {
+        currentDiagnosticoArea.value = "Error de conexión con la IA: " + (errApi.message || "Fallo desconocido.");
+      }
     } finally {
-      spinnerOverlay.style.display = 'none';
+      if (currentSpinnerOverlay) currentSpinnerOverlay.style.display = 'none';
       const spinnerText = document.querySelector('.mant-spinner-text');
       if (spinnerText) spinnerText.textContent = "Analizando planos y fotografías del bloque...";
-      btnIA.disabled = false;
+      targetBtnIA.disabled = false;
     }
   });
 
   // ── Export PDF ──
-  btnPDF.addEventListener('click', () => {
-    const blockId = bloqueSelect.value;
+  document.addEventListener('click', (e) => {
+    const targetBtnPDF = e.target.closest('#mant-btn-pdf');
+    if (!targetBtnPDF) return;
+    
+    const currentBloqueSelect = document.getElementById('mant-bloque');
+    const blockId = currentBloqueSelect ? currentBloqueSelect.value : null;
     if (!blockId) return;
+    
     exportarInformeOficial();
   });
 
   console.log('🔧 Módulo de Mantenimiento inicializado.');
 }
+
+// Global exposure as requested by user to avoid Export Syntax Errors
+window.initMantenimiento = initMantenimiento;

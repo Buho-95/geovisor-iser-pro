@@ -1,10 +1,10 @@
 /**
  * Servicio Firestore: sincronización en tiempo real y helpers para futuras colecciones.
  */
-import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { collection, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { db } from './firebase.js';
-import { state, setArchivos } from '../core/state.js';
-import { dbPath } from '../core/config.js';
+import { state, setArchivos, setEstadosBloques } from '../core/state.js';
+import { dbPath, COLLECTIONS } from '../core/config.js';
 
 /**
  * Inicia sync en tiempo real de archivos_iser.
@@ -35,4 +35,44 @@ export function startArchivosSync(onUpdate) {
       onUpdate?.();
     }
   );
+}
+
+/**
+ * Inicia sync en tiempo real de estados de bloques.
+ * @param {function(): void} onUpdate - Callback al actualizar datos
+ * @returns {function} - Unsubscribe
+ */
+export function startEstadosBloquesSync(onUpdate) {
+  return onSnapshot(
+    collection(db, COLLECTIONS.ESTADOS_BLOQUES),
+    (snapshot) => {
+      const docs = {};
+      snapshot.docs.forEach(d => {
+        docs[d.id] = d.data();
+      });
+      state.estadosBloques = docs;
+      setEstadosBloques(docs);
+      onUpdate?.();
+    },
+    (error) => {
+      console.error('Firestore estados_bloques sync error:', error);
+      onUpdate?.();
+    }
+  );
+}
+
+/**
+ * Guarda los scores y color de un bloque en Firestore.
+ * @param {string} blockId
+ * @param {Object} datos
+ */
+export async function guardarEstadoBloque(blockId, datos) {
+  try {
+    const docRef = doc(db, COLLECTIONS.ESTADOS_BLOQUES, blockId);
+    await setDoc(docRef, datos, { merge: true });
+    return true;
+  } catch (e) {
+    console.error('Error guardando estado del bloque', e);
+    throw e;
+  }
 }

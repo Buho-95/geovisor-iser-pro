@@ -1,9 +1,9 @@
 /**
  * Bootstrap: inicializa la app con lazy loading de módulos opcionales.
  */
-import { state, setSede } from './core/state.js';
+import { state, setSede, setCurrentBlock } from './core/state.js';
 import { initAuth } from './services/auth.js';
-import { startArchivosSync } from './services/firestore.js';
+import { startArchivosSync, startEstadosBloquesSync } from './services/firestore.js';
 import { init as initLayerManager } from './plugins/layer-manager.js';
 import {
   initLeafletMap,
@@ -30,7 +30,7 @@ import { initFileManager, getFileManager } from './file-manager.js';
 import { estructuraPlanimetriaISER } from './planoteca-structure.js';
 
 function doSelectBlock(id) {
-  state.currentBlockId = id;
+  setCurrentBlock(id);
   highlightBlock(id, state.currentBlockId);
   showBlockView(id, (blockId) => state.archivosNube?.filter(a => a.bloque === blockId) || []);
 
@@ -86,6 +86,8 @@ export async function bootstrap() {
           showBlockView(state.currentBlockId, (blockId) => state.archivosNube?.filter(a => a.bloque === blockId) || []);
         }
       });
+      // Start block states sync
+      startEstadosBloquesSync();
     }
   });
 
@@ -138,34 +140,6 @@ export async function bootstrap() {
       document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
       document.getElementById('panel-visor')?.classList.add('active');
     } else if (moduleId === 'mantenimiento') {
-      // 🔐 Guard: Solo admins pueden acceder al módulo de Mantenimiento
-      if (state.userRole !== 'admin') {
-        if (appMain) appMain.style.display = '';
-        if (panelTabs) panelTabs.style.display = '';
-        document.querySelectorAll('.panel-tab').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
-        const mantPanel = document.getElementById('panel-mantenimiento');
-        if (mantPanel) {
-          mantPanel.classList.add('active');
-          mantPanel.innerHTML = `
-            <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
-              <div style="text-align:center;max-width:340px;">
-                <i class="ph ph-lock-key" style="font-size:3.5rem;color:var(--danger);display:block;margin-bottom:1rem;"></i>
-                <h3 style="font-size:1.1rem;font-weight:700;color:var(--text-heading);margin:0 0 0.5rem;">Acceso Denegado</h3>
-                <p style="font-size:0.82rem;color:var(--text-muted);line-height:1.6;margin:0 0 1.25rem;">
-                  Esta función es exclusiva para administradores autorizados.
-                </p>
-                <button type="button" id="mant-denied-back" style="
-                  padding:10px 24px;background:linear-gradient(135deg,var(--cyan),#1B5E20);color:white;
-                  border:none;border-radius:var(--radius-md);font-weight:700;font-size:0.8rem;cursor:pointer;
-                  display:inline-flex;align-items:center;gap:6px;
-                "><i class="ph ph-arrow-left"></i> Volver al Mapa</button>
-              </div>
-            </div>`;
-          document.getElementById('mant-denied-back')?.addEventListener('click', () => activateModule('mapa'));
-        }
-        return;
-      }
       // Show the full layout but activate Mantenimiento panel
       if (appMain) appMain.style.display = '';
       if (panelTabs) panelTabs.style.display = '';
@@ -257,8 +231,10 @@ export async function bootstrap() {
   // Lazy load: Mantenimiento Module
   if (document.getElementById('mant-form')) {
     try {
-      const { initMantenimiento } = await import('./mantenimiento.js');
-      initMantenimiento();
+      await import('./mantenimiento.js');
+      if (typeof window.initMantenimiento === 'function') {
+        window.initMantenimiento();
+      }
     } catch (e) {
       console.error('❌ Error cargando Módulo de Mantenimiento:', e);
     }

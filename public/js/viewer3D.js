@@ -4,6 +4,26 @@ let OrbitControlsCls = null;
 let DRACOLoaderCls = null;
 let MeshoptDecoderMod = null;
 
+// Global references for dynamic relocation
+export let globalRenderer = null;
+export let globalCamera = null;
+
+export function exportCanvasTo(targetContainerId) {
+  const container = document.querySelector(targetContainerId);
+  if (!container || !globalRenderer || !globalCamera) return;
+
+  container.appendChild(globalRenderer.domElement);
+
+  const w = container.clientWidth || 400;
+  const h = container.clientHeight || 350;
+  globalRenderer.setSize(w, h, false);
+  globalCamera.aspect = w / h;
+  globalCamera.updateProjectionMatrix();
+
+  globalRenderer.domElement.style.display = 'block';
+  globalRenderer.domElement.style.visibility = 'visible';
+}
+
 function detectBlockedByClient(err) {
   const msg = String(err?.message || err || '');
   return /ERR_BLOCKED_BY_CLIENT|blocked by client/i.test(msg);
@@ -109,6 +129,9 @@ export async function init3DViewer({ container, url, onLoaded, onError, onStart,
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 50000);
 
+  globalRenderer = renderer;
+  globalCamera = camera;
+
   const ambient = new THREE.AmbientLight(0xffffff, 0.75);
   scene.add(ambient);
   const dir = new THREE.DirectionalLight(0xffffff, 1.1);
@@ -126,7 +149,12 @@ export async function init3DViewer({ container, url, onLoaded, onError, onStart,
 
   container.innerHTML = '';
   container.style.position = 'relative';
-  container.appendChild(renderer.domElement);
+  container.style.zIndex = '10'; // Ensure it's above backgrounds
+  
+  const canvas = renderer.domElement;
+  canvas.style.position = 'relative';
+  canvas.style.zIndex = '10';
+  container.appendChild(canvas);
 
   let destroyed = false;
   let raf = 0;
@@ -134,8 +162,8 @@ export async function init3DViewer({ container, url, onLoaded, onError, onStart,
 
   const resize = () => {
     if (destroyed) return;
-    const w = container.clientWidth || 1;
-    const h = container.clientHeight || 1;
+    const w = container.clientWidth || 400;
+    const h = container.clientHeight || 350;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();

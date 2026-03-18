@@ -5,7 +5,8 @@ export const COLLECTIONS = {
   ARCHIVOS: 'archivos_iser',
   USUARIOS: 'usuarios_iser',
   CAPAS_SIG: 'capas_sig',
-  ESTADISTICAS: 'estadisticas'
+  ESTADISTICAS: 'estadisticas',
+  ESTADOS_BLOQUES: 'bloques_estado'
 };
 
 export const STORAGE_PATHS = {

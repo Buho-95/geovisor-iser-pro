@@ -74,6 +74,9 @@ export function initAuth(callbacks = {}) {
         state.userRole = 'visitor';
         state.userProfile = null;
 
+        // Visitor class for CSS rules (hides .admin-only)
+        document.body.classList.add('visitor-mode');
+
         // Update UI for visitor
         const nameEl = document.getElementById('header-user-name');
         const roleEl = document.getElementById('header-user-role');
@@ -121,6 +124,9 @@ export function initAuth(callbacks = {}) {
           document.getElementById('password').value
         );
         state.userRole = 'admin';
+
+        // Admin mode - remove visitor class
+        document.body.classList.remove('visitor-mode');
 
         // Update UI for admin
         const nameEl = document.getElementById('header-user-name');
@@ -207,6 +213,7 @@ export function initAuth(callbacks = {}) {
       }
 
       // Update header
+      document.body.classList.remove('visitor-mode');
       const nameEl = document.getElementById('header-user-name');
       const roleEl = document.getElementById('header-user-role');
       if (nameEl) nameEl.textContent = state.userProfile?.nombre || u.email?.split('@')[0] || 'Admin';
@@ -235,6 +242,7 @@ export function initAuth(callbacks = {}) {
     } else if (u && u.isAnonymous) {
       // ── Visitante Anónimo recuperado ──
       state.userRole = 'visitor';
+      document.body.classList.add('visitor-mode');
       const nameEl = document.getElementById('header-user-name');
       const roleEl = document.getElementById('header-user-role');
       if (nameEl) nameEl.textContent = 'Visitante';

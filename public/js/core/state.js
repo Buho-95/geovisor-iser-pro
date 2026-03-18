@@ -12,7 +12,8 @@ export const state = {
   currentFileViewing: null,
   capasActivas: new Set(),
   dashboardData: null,
-  currentSede: 'pamplona' // 'pamplona' | 'rinconada' | 'caldera'
+  currentSede: 'pamplona', // 'pamplona' | 'rinconada' | 'caldera'
+  estadosBloques: {} // Estado y scores de cada bloque
 };
 
 export function setUser(user) {
@@ -33,4 +34,9 @@ export function setCurrentBlock(id) {
 export function setSede(sede) {
   state.currentSede = sede;
   emit(EVENTS.SEDE_CHANGED, sede);
+}
+
+export function setEstadosBloques(estados) {
+  state.estadosBloques = estados;
+  emit('ESTADOS_BLOQUES_CHANGED', estados);
 }

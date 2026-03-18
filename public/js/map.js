@@ -4,7 +4,7 @@
  * Emite MAP_READY para plugins (capas SIG).
  */
 import { getCampusData, getSedeConfig } from './campus-data.js';
-import { emit, EVENTS } from './core/events.js';
+import { emit, EVENTS, on } from './core/events.js';
 import { state } from './core/state.js';
 
 let map = null;
@@ -39,13 +39,16 @@ export function highlightBlock(id, currentBlockId) {
   const sedeConfig = getSedeConfig(state.currentSede || 'pamplona');
   const blocks = sedeConfig.blocks || {};
   Object.entries(mapPolygons).forEach(([polyId, poly]) => {
+    // Determine the baseline color from Firestore or fallback to campusData
+    const blockStateColor = state.estadosBloques?.[polyId]?.color_sugerido;
+    const baseColor = blockStateColor || blocks[polyId]?.color || '#FFFFFF';
+
     if (polyId === id) {
-      poly.setStyle({ fillOpacity: 0.8, weight: 3, color: '#FFFFFF' });
+      poly.setStyle({ fillOpacity: 0.8, weight: 3, color: '#FFFFFF', fillColor: baseColor });
       if (map) map.flyToBounds(poly.getBounds(), { padding: [40, 40], maxZoom: 20, duration: 0.5 });
     } else {
-      const blockData = blocks[polyId];
-      if (blockData) {
-        poly.setStyle({ fillOpacity: 0.35, weight: 2, color: blockData.color });
+      if (blocks[polyId]) {
+        poly.setStyle({ fillOpacity: 0.35, weight: 2, color: baseColor, fillColor: baseColor });
       }
     }
   });
@@ -60,7 +63,9 @@ export function resetBlockStyles() {
   Object.entries(mapPolygons).forEach(([polyId, poly]) => {
     const blockData = blocks[polyId];
     if (blockData) {
-      poly.setStyle({ fillOpacity: 0.35, weight: 2, color: blockData.color });
+      const blockStateColor = state.estadosBloques?.[polyId]?.color_sugerido;
+      const baseColor = blockStateColor || blockData.color;
+      poly.setStyle({ fillOpacity: 0.35, weight: 2, color: baseColor, fillColor: baseColor });
     }
   });
 }
@@ -125,6 +130,15 @@ export function initLeafletMap(onBlockSelect) {
 
   // ─── Dibujar sede inicial (Pamplona) ───
   _drawSede('pamplona', onBlockSelect);
+
+  // Escuchar a cambios de estado de bloques desde Firestore
+  on('ESTADOS_BLOQUES_CHANGED', () => {
+    if (state.currentBlockId) {
+      highlightBlock(state.currentBlockId, state.currentBlockId);
+    } else {
+      resetBlockStyles();
+    }
+  });
 
   emit(EVENTS.MAP_READY, map);
 }
@@ -209,10 +223,13 @@ function _drawSede(sedeId, onBlockSelect) {
   for (const [id, data] of Object.entries(blocks)) {
     if (!data.coords || data.coords.length === 0) continue;
 
+    const blockStateColor = state.estadosBloques?.[id]?.color_sugerido;
+    const baseColor = blockStateColor || data.color;
+
     const polygon = L.polygon(data.coords, {
-      color: data.color,
+      color: baseColor,
       weight: 2,
-      fillColor: data.color,
+      fillColor: baseColor,
       fillOpacity: 0.35
     }).addTo(map);
 
@@ -227,13 +244,19 @@ function _drawSede(sedeId, onBlockSelect) {
       }
     );
 
-    polygon.on('click', () => onBlockSelect?.(id));
+    polygon.on('click', (e) => {
+      console.log("Clic detectado en bloque:", id, "coordenadas:", e?.latlng);
+      onBlockSelect?.(id);
+    });
     polygon.on('mouseover', function () {
       this.setStyle({ fillOpacity: 0.7, weight: 3 });
       this.openTooltip();
     });
     polygon.on('mouseout', function () {
-      if (getCurrentBlockId() !== id) this.setStyle({ fillOpacity: 0.35, weight: 2 });
+      if (getCurrentBlockId() !== id) {
+         const currentColor = state.estadosBloques?.[id]?.color_sugerido || data.color;
+         this.setStyle({ fillOpacity: 0.35, weight: 2, color: currentColor, fillColor: currentColor });
+      }
       this.closeTooltip();
     });
     mapPolygons[id] = polygon;

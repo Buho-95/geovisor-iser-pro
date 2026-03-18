@@ -157,7 +157,7 @@
             </div>
 
             <div class="header-actions">
-                <button type="button" id="btn-open-upload" class="btn-upload-header hidden">
+                <button type="button" id="btn-open-upload" class="btn-upload-header admin-only hidden">
                     <i class="ph ph-cloud-arrow-up"></i>
                     + Subir Plano/Archivo
                 </button>
@@ -193,8 +193,8 @@
                 <button type="button" class="top-nav-btn active" data-module="mapa">
                     <i class="ph ph-map-trifold"></i> Mapa
                 </button>
-                <button type="button" id="nav-btn-mantenimiento" class="top-nav-btn" data-module="mantenimiento" style="display:none;">
-                    <i class="ph ph-wrench"></i> Mantenimiento
+                <button type="button" id="nav-btn-mantenimiento" class="top-nav-btn admin-only" data-module="mantenimiento">
+                    <i class="ph ph-chart-polar"></i> Analítica
                 </button>
                 <button type="button" class="top-nav-btn" data-module="dashboard">
                     <i class="ph ph-chart-line-up"></i> Dashboard
@@ -356,7 +356,7 @@
                         </div>
 
                         <!-- MANTENIMIENTO Tab -->
-                        <div id="panel-mantenimiento" class="panel-content">
+                        <div id="panel-mantenimiento" class="panel-content admin-only">
                             <div class="mant-form-wrap">
                                 <div class="mant-header">
                                     <i class="ph ph-wrench"></i>
@@ -373,6 +373,7 @@
                                             <option value="">— Selecciona un bloque —</option>
                                         </select>
                                     </div>
+
 
                                     <div class="mant-row-2">
                                         <div class="mant-field">
@@ -395,29 +396,26 @@
                                         <div id="mant-context-list"></div>
                                     </div>
 
-                                    <div class="mant-field">
+                                    <div class="mant-field admin-only">
                                         <label class="mant-label">Diagnóstico de la IA</label>
-                                        <textarea id="mant-diagnostico" class="mant-textarea" rows="7" readonly placeholder="Haz clic en 'Generar Diagnóstico' para que la IA analice los planos y fotografías del bloque..."></textarea>
+                                        <textarea id="mant-diagnostico" class="mant-textarea" rows="7" placeholder="Haz clic en 'Generar Diagnóstico' para que la IA analice los planos y fotografías del bloque..."></textarea>
                                     </div>
 
                                     <div class="mant-field" id="mant-charts-container" style="display:none;">
-                                        <label class="mant-label">Analítica Predictiva</label>
-                                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem; background: var(--bg-glass); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
-                                            <div style="position: relative; height: 200px;">
-                                                <canvas id="mant-chart-dist"></canvas>
-                                            </div>
-                                            <div style="position: relative; height: 200px;">
-                                                <canvas id="mant-chart-estado"></canvas>
+                                        <label class="mant-label">Analítica Predictiva (Roles y Seguridad)</label>
+                                        <div style="background: var(--bg-glass); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); display: flex; justify-content: center; align-items: center; min-height: 250px;">
+                                            <div style="position: relative; height: 300px; width: 100%; max-width: 400px;">
+                                                <canvas id="mant-chart-radar"></canvas>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div class="mant-field">
+                                    <div class="mant-field admin-only">
                                         <label class="mant-label" for="mant-recomendaciones">Recomendaciones Técnicas</label>
                                         <textarea id="mant-recomendaciones" class="mant-textarea" rows="4" placeholder="Escribe tus observaciones adicionales aquí..."></textarea>
                                     </div>
 
-                                    <div class="mant-actions">
+                                    <div class="mant-actions admin-only">
                                         <button type="button" id="mant-btn-ia" class="mant-btn mant-btn-ai" disabled>
                                             <i class="ph ph-robot"></i> Generar Diagnóstico con IA
                                         </button>

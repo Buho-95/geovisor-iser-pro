@@ -323,7 +323,27 @@ export function setupUpload() {
  * Sube un archivo individual al servidor
  */
 async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
-  const fileName = file.name;
+  let fileName = file.name;
+
+  // Add category prefix based on selected folder
+  if (carpeta) {
+    let prefix = '';
+    const upperCarpeta = carpeta.toUpperCase();
+    if (upperCarpeta.includes('ELECTRICOS')) {
+      prefix = 'ELEC_';
+    } else if (upperCarpeta.includes('REDES_DE_DATOS')) {
+      prefix = 'DATA_';
+    } else if (upperCarpeta.includes('ACCESIBILIDAD_NTC_6047')) {
+      prefix = 'MATRIZ_';
+    } else if (upperCarpeta.includes('ARQUITECTONICO') || upperCarpeta.includes('ESTRUCTURAL')) {
+      prefix = 'ARQ_';
+    }
+
+    if (prefix && !fileName.toUpperCase().startsWith(prefix)) {
+      fileName = prefix + fileName;
+    }
+  }
+
   const rutaStorage = `${storageBasePath}/${state.currentBlockId}/${carpeta}/${fileName}`;
   const fileRef = storageRef(storage, rutaStorage);
 
@@ -353,7 +373,7 @@ async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
       },
       (error) => {
         console.error('Error al subir archivo:', error);
-        resolve({ success: false, error, fileName: file.name });
+        resolve({ success: false, error, fileName: fileName });
       },
       async () => {
         try {
@@ -373,11 +393,11 @@ async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
           };
 
           await addDoc(collection(db, dbPath), nuevoRegistro);
-          resolve({ success: true, fileName: file.name, registro: nuevoRegistro });
+          resolve({ success: true, fileName: fileName, registro: nuevoRegistro });
 
         } catch (error) {
           console.error('Error en Base de datos:', error);
-          resolve({ success: false, error, fileName: file.name });
+          resolve({ success: false, error, fileName: fileName });
         }
       }
     );
