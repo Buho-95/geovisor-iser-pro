@@ -14,5 +14,27 @@
     "three": "^0.135.0",
     "web-ifc": "^0.0.76",
     "web-ifc-viewer": "^1.0.218"
-  }
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  },
+  "name": "geovisoriser",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Buho-95/Geovisor-nueva-interfaz-9-03-2026.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Buho-95/Geovisor-nueva-interfaz-9-03-2026/issues"
+  },
+  "homepage": "https://github.com/Buho-95/Geovisor-nueva-interfaz-9-03-2026#readme"
 }

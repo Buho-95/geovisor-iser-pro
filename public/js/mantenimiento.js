@@ -345,6 +345,19 @@ function exportarInformeOficial() {
     alert('Error crítico: La librería de reportes no cargó. Verifica que no tengas un bloqueador de publicidad activado.');
     return;
   }
+
+  // 1. CAPTURA DEL CANVAS 3D
+  let imgData3D = null;
+  try {
+      const canvas3D = document.querySelector('#viewer-container canvas') || document.querySelector('canvas');
+      if (canvas3D) {
+          imgData3D = canvas3D.toDataURL('image/jpeg', 0.9);
+      }
+  } catch (e) {
+      console.warn("No se pudo extraer el Canvas 3D. Usando fallback.", e);
+      imgData3D = null;
+  }
+
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const currentBloqueSelect = document.getElementById('mant-bloque');
@@ -387,27 +400,64 @@ function exportarInformeOficial() {
   doc.text(`Área: ${blockInfo.area || '--'} m²  |  Recintos: ${blockInfo.rooms || '--'}`, 14, infoY + 12);
   doc.text(`Construcción: ${blockInfo.construction || '--'}  |  Cubierta: ${blockInfo.roof || '--'}`, 14, infoY + 18);
 
+  // ── INYECCIÓN EN EL PDF (jsPDF) - Fotografía del modelo 3D ──
+  const snapshotY = infoY + 28;
+  const snapWidth = 100;
+  const snapHeight = 60;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const snapX = (pageWidth - snapWidth) / 2;
+
+  if (imgData3D) {
+    doc.addImage(imgData3D, 'JPEG', snapX, snapshotY, snapWidth, snapHeight);
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.5);
+    doc.rect(snapX, snapshotY, snapWidth, snapHeight); // Borde sutil
+  } else {
+    doc.setFillColor(230, 230, 230);
+    doc.rect(snapX, snapshotY, snapWidth, snapHeight, 'F');
+    doc.setTextColor(150, 150, 150);
+    doc.setFontSize(10);
+    doc.text('Modelo 3D no disponible', pageWidth / 2, snapshotY + (snapHeight / 2), { align: 'center', baseline: 'middle' });
+  }
+
+  const marginX = 14;
+  const maxPageY = 270;
+
   // ── Diagnóstico ──
+  let diagY = snapshotY + snapHeight + 15;
+  
+  if (diagY > maxPageY) {
+    doc.addPage();
+    diagY = 20;
+  }
+
+  doc.setTextColor(30, 30, 30);
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Diagnóstico de la IA', 14, infoY + 32);
+  doc.text('Diagnóstico de la IA', marginX, diagY);
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   const currentDiagnosticoArea = document.getElementById('mant-diagnostico');
   const diagText = currentDiagnosticoArea?.value || 'Sin diagnóstico generado.';
   const diagLines = diagText.split('\n');
-  const splitDiag = doc.splitTextToSize(diagLines, 180);
-  doc.text(splitDiag, 14, infoY + 40);
+  const splitDiag = doc.splitTextToSize(diagLines, 210 - marginX * 2);
+  doc.text(splitDiag, marginX, diagY + 8);
 
-  let currentY = infoY + 42 + (splitDiag.length * 4);
+  let currentY = diagY + 10 + (splitDiag.length * 4);
 
   // ── Charts (Analítica) ──
   const chartContainer = document.getElementById('mant-charts-container');
   if (chartContainer && chartContainer.style.display !== 'none') {
+    // 1. SALTO DE PÁGINA INTELIGENTE PARA EL RADAR
+    if (currentY + 110 > maxPageY) {
+      doc.addPage();
+      currentY = 20;
+    }
+
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Analítica Predictiva (Radar NTC 6047)', 14, currentY);
+    doc.text('Analítica Predictiva (Radar NTC 6047)', marginX, currentY);
 
     const canvasRadar = document.getElementById('mant-chart-radar');
     let hasCharts = false;
@@ -429,10 +479,10 @@ function exportarInformeOficial() {
 
       const imgRadar = tempCanvas.toDataURL('image/png', 1.0);
       
-      // Center the radar image roughly (assuming 80x80 size in PDF)
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const imgWidth = 100;
-      doc.addImage(imgRadar, 'PNG', (pageWidth - imgWidth) / 2, currentY + 6, imgWidth, imgWidth);
+      // 2. RESPETO DE MÁRGENES LATERALES
+      const chartWidth = 100;
+      const chartX = (210 - chartWidth) / 2;
+      doc.addImage(imgRadar, 'PNG', chartX, currentY + 6, chartWidth, chartWidth);
       hasCharts = true;
     }
 
@@ -442,22 +492,31 @@ function exportarInformeOficial() {
   }
 
   // ── Recomendaciones ──
-  const recoY = currentY;
+  let recoY = currentY;
+  if (recoY + 20 > maxPageY) {
+    doc.addPage();
+    recoY = 20;
+  }
+
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Recomendaciones Técnicas', 14, recoY);
+  doc.text('Recomendaciones Técnicas', marginX, recoY);
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   const currentRecomendacionesArea = document.getElementById('mant-recomendaciones');
   const recoText = currentRecomendacionesArea?.value || 'Sin recomendaciones adicionales.';
   const recoLines = recoText.split('\n');
-  const splitReco = doc.splitTextToSize(recoLines, 180);
-  doc.text(splitReco, 14, recoY + 8);
+  const splitReco = doc.splitTextToSize(recoLines, 210 - marginX * 2);
+  doc.text(splitReco, marginX, recoY + 8);
 
   // ── File Table (Summary Format) ──
   if (context.files.length > 0) {
-    const tableY = recoY + 12 + (splitReco.length * 4);
+    let tableY = recoY + 12 + (splitReco.length * 4);
+    if (tableY + 30 > maxPageY) { // Estimación básica antes de tabla
+      doc.addPage();
+      tableY = 20;
+    }
 
     // Group files by folder
     const folderGroups = {};
