@@ -1,6 +1,7 @@
 /**
  * Bootstrap: inicializa la app con lazy loading de módulos opcionales.
  */
+import { Logger } from './core/logger.js';
 import { state, setSede, setCurrentBlock } from './core/state.js';
 import { initAuth } from './services/auth.js';
 import { startArchivosSync, startEstadosBloquesSync } from './services/firestore.js';
@@ -106,7 +107,7 @@ export async function bootstrap() {
     sedeSelector.addEventListener('change', (e) => {
       const nuevaSede = e.target.value;
       setSede(nuevaSede);
-      console.log(`🏛️ Sede cambiada a: ${nuevaSede}`);
+      Logger.info(`🏛️ Sede cambiada a: ${nuevaSede}`);
 
       // 🗺️ Cambiar vista del mapa con flyTo + polígonos
       switchSede(nuevaSede);
@@ -236,7 +237,7 @@ export async function bootstrap() {
         window.initMantenimiento();
       }
     } catch (e) {
-      console.error('❌ Error cargando Módulo de Mantenimiento:', e);
+      Logger.error('❌ Error cargando Módulo de Mantenimiento:', e);
     }
   }
 
@@ -246,11 +247,40 @@ export async function bootstrap() {
       const { initDashboardPro } = await import('./dashboard.js?v=dashboard-pro-2');
       initDashboardPro();
     } catch (e) {
-      console.error('❌ Error cargando Dashboard Pro:', e);
+      Logger.error('❌ Error cargando Dashboard Pro:', e);
       const el = document.getElementById('dashboard-container');
       if (el) {
         el.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:0.85rem;">No se pudo cargar el Dashboard.</div>';
       }
     }
   }
+
+  // ═══════════════════════════════════════════════════════
+  // ⌨️ GLOBAL ESC KEY — Closes whichever modal is open (priority order)
+  // Visor modal Esc is already handled in visor.js; this covers the rest.
+  // ═══════════════════════════════════════════════════════
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+
+    // 1. Confirm delete modal (highest priority)
+    const confirmModal = document.getElementById('confirm-delete-modal');
+    if (confirmModal?.classList.contains('activo')) {
+      document.getElementById('confirm-delete-cancel')?.click();
+      return;
+    }
+
+    // 2. Upload modal
+    const uploadModal = document.getElementById('upload-modal');
+    if (uploadModal?.classList.contains('activo')) {
+      document.getElementById('btn-cerrar-upload')?.click();
+      return;
+    }
+
+    // 3. Block edit modal
+    const blockEditModal = document.getElementById('block-edit-modal');
+    if (blockEditModal?.classList.contains('activo')) {
+      closeBlockEditModal();
+      return;
+    }
+  });
 }

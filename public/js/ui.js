@@ -3,6 +3,7 @@
  */
 import { state } from './core/state.js';
 import { on, EVENTS } from './core/events.js';
+import { Logger } from './core/logger.js';
 import { getCampusData } from './campus-data.js';
 import { generarMenuPlanoteca } from './planoteca-structure.js';
 import { getPathsForFilter, getFirstFileInPath, getFilesInPath, normalizeKey } from './services/fileMapper.js';
@@ -235,7 +236,7 @@ async function renderBlockPdfPreview(container, file) {
   iframe.style.width = '100%';
   iframe.style.height = '100%';
   iframe.style.border = '0';
-  iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
+  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
   iframe.setAttribute('referrerpolicy', 'no-referrer');
   iframe.loading = 'lazy';
   iframe.onload = () => { };
@@ -824,6 +825,7 @@ class DocPreviewModal {
       iframe.style.width = '100%';
       iframe.style.height = '100%';
       iframe.style.border = '0';
+      iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
       iframe.onload = () => this._markLoaded();
       content.appendChild(iframe);
       iframe.src = `https://docs.google.com/viewerng/viewer?embedded=true&url=${encodeURIComponent(url)}`;
@@ -1514,7 +1516,7 @@ export function showBlockView(id, getArbolHTML) {
 function handleSubcarpetaSeleccionada(event) {
   const { ruta, nombre } = event.detail;
 
-  console.log('🔍 handleSubcarpetaSeleccionada llamado:', { ruta, nombre });
+  Logger.debug('handleSubcarpetaSeleccionada llamado:', { ruta, nombre });
 
   // Actualizar el uploader jerárquico (L1/L2/L3) con la ruta seleccionada
   const parts = (ruta || '').split('/').filter(Boolean);
@@ -1555,10 +1557,10 @@ function handleSubcarpetaSeleccionada(event) {
   // Actualizar UI para mostrar que está seleccionada
   actualizarSubcarpetaActiva(ruta);
 
-  console.log('🔍 Estado actual:', {
+  Logger.debug('Estado actual:', {
     currentBlockId: state?.currentBlockId,
     archivosNubeCount: state?.archivosNube?.length || 0,
-    archivosNube: state?.archivosNube?.slice(0, 3) // Primeros 3 para revisar
+    archivosNube: state?.archivosNube?.slice(0, 3)
   });
 
   const viewBlock = document.getElementById('view-block');
@@ -1738,7 +1740,7 @@ export function saveBlockInfo(formData) {
   // Actualizar vista
   showBlockInfo(blockId);
 
-  console.log('Información del bloque actualizada:', blockId, campusData[blockId].info);
+  Logger.debug('Información del bloque actualizada:', blockId, campusData[blockId].info);
   return true;
 }
 
@@ -1842,7 +1844,7 @@ export function setupDeleteDelegation(container) {
       }
 
       // 3. Firestore onSnapshot will auto-refresh the file list
-      console.log('✅ Archivo eliminado desde BD:', file.nombre);
+      Logger.info('Archivo eliminado desde BD:', file.nombre);
 
       // Show notification
       const fileManager = window.getFileManager?.();

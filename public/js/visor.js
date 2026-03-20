@@ -1,5 +1,6 @@
 import { state } from './core/state.js';
 import { emit, EVENTS } from './core/events.js';
+import { Logger } from './core/logger.js';
 import { ref as storageRef, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 import { doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { storage, db } from './services/firebase.js';
@@ -284,7 +285,7 @@ async function renderExcelViewer(fileUrl, fileName) {
     }
 
   } catch (error) {
-    console.error('Error renderizando Excel/CSV:', error);
+    Logger.error('Error renderizando Excel/CSV:', error);
     if (msgEl) {
       msgEl.classList.remove('hidden');
       msgEl.innerHTML = `
@@ -423,31 +424,45 @@ export async function openViewer(file) {
       }
       if (iframeEl) {
         const safeUrl = encodeURIComponent(file.url);
+        iframeEl.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
         iframeEl.src = `https://docs.google.com/viewerng/viewer?embedded=true&url=${safeUrl}`;
         iframeEl.style.display = 'block';
         currentViewerType = 'docs';
-        
-        // Timeout de 3.5s para fallback
-        const fallbackId = setTimeout(() => {
-          if (visorModal.classList.contains('activo') && currentViewerType === 'docs') {
-             if (msgEl) {
-               msgEl.classList.remove('hidden');
-               msgEl.innerHTML = `
-                  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;">
-                    <i class="ph ph-warning" style="font-size:3rem;margin-bottom:1rem;color:var(--amber);"></i>
-                    <h4 style="font-size:1.1rem;font-weight:700;">El visor en línea tarda demasiado</h4>
-                    <p style="font-size:0.85rem;margin-bottom:1.5rem;text-align:center;max-width:300px;color:var(--text-muted);">Es posible que el archivo sea muy pesado o el servicio de Google no esté disponible en este momento.</p>
-                    <a href="${file.url}" target="_blank" class="ui-button" style="background:#1976D2;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;display:flex;align-items:center;">
-                      <i class="ph ph-download-simple" style="margin-right:8px;font-size:1.2rem;"></i> Abrir / Descargar Archivo Nativo
-                    </a>
-                  </div>
-               `;
-             }
-             iframeEl.style.display = 'none';
+
+        // ── CORS/SecurityError fallback helper ──
+        const showFallbackUI = (reason) => {
+          if (!visorModal.classList.contains('activo') || currentViewerType !== 'docs') return;
+          if (msgEl) {
+            msgEl.classList.remove('hidden');
+            msgEl.innerHTML = `
+              <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;">
+                <i class="ph ph-warning" style="font-size:3rem;margin-bottom:1rem;color:var(--amber);"></i>
+                <h4 style="font-size:1.1rem;font-weight:700;">${reason}</h4>
+                <p style="font-size:0.85rem;margin-bottom:1.5rem;text-align:center;max-width:300px;color:var(--text-muted);">El servicio de visor en línea no pudo cargar el documento. Puedes abrirlo directamente en una pestaña nueva.</p>
+                <a href="${file.url}" target="_blank" rel="noopener" class="ui-button" style="background:#1976D2;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;display:flex;align-items:center;">
+                  <i class="ph ph-arrow-square-out" style="margin-right:8px;font-size:1.2rem;"></i> Abrir en pestaña nueva
+                </a>
+              </div>
+            `;
           }
+          iframeEl.style.display = 'none';
+        };
+
+        // Immediate error handler for CORS/SecurityError
+        iframeEl.onerror = () => showFallbackUI('Error de seguridad (CORS)');
+
+        // Timeout fallback (3.5s) for slow loads
+        const fallbackId = setTimeout(() => {
+          showFallbackUI('El visor en línea tarda demasiado');
         }, 3500);
         
         iframeEl.dataset.fallbackId = fallbackId;
+
+        // Clear timeout if iframe loads successfully
+        iframeEl.onload = () => {
+          clearTimeout(fallbackId);
+          delete iframeEl.dataset.fallbackId;
+        };
       }
       if (msgEl) msgEl.classList.add('hidden');
       break;
@@ -509,14 +524,14 @@ export async function openViewer(file) {
             container: glbContainer,
             url: file.url,
             onLoaded: () => {
-              console.log('✅ Modelo 3D cargado exitosamente');
+              Logger.info('Modelo 3D cargado exitosamente');
             },
             onProgress: (pct) => {
               const progressEl = document.getElementById('visor-3d-progress');
               if (progressEl) progressEl.textContent = `${pct}%`;
             },
             onError: (err) => {
-              console.error('❌ Error cargando modelo 3D:', err);
+              Logger.error('Error cargando modelo 3D:', err);
               glbContainer.innerHTML = `
                 <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
                   <i class="ph ph-warning" style="font-size:3rem;margin-bottom:1rem;color:var(--amber);"></i>
@@ -526,7 +541,7 @@ export async function openViewer(file) {
             }
           });
         } catch (err) {
-          console.error('❌ Error inicializando visor 3D:', err);
+          Logger.error('Error inicializando visor 3D:', err);
           glbContainer.innerHTML = `
             <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
               <i class="ph ph-warning" style="font-size:3rem;margin-bottom:1rem;color:var(--amber);"></i>
@@ -609,7 +624,7 @@ export function setupVisorButtons() {
           await document.exitFullscreen();
         }
       } catch (err) {
-        console.error('Error toggling fullscreen:', err);
+        Logger.error('Error toggling fullscreen:', err);
       }
     });
 
@@ -703,9 +718,9 @@ export function setupVisorButtons() {
         visorModal.classList.remove('activo');
         cleanupViewer();
 
-        console.log('✅ Archivo eliminado exitosamente:', file.nombre);
+        Logger.info('Archivo eliminado exitosamente:', file.nombre);
       } catch (error) {
-        console.error('❌ Error eliminando archivo:', error);
+        Logger.error('Error eliminando archivo:', error);
         alert('Error al eliminar el archivo: ' + error.message);
       } finally {
         eliminarBtn.disabled = false;

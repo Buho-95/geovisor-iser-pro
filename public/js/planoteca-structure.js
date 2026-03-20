@@ -2,6 +2,8 @@
  * Estructura Profesional de Planoteca ISER
  * Sistema jerárquico de carpetas y especialidades
  */
+import { Logger } from './core/logger.js';
+
 export const estructuraPlanimetriaISER = {
   "01_Arquitectonico": {
     "subcarpetas": ["01_Modelos_2D_AutoCAD", "02_Modelo_3D_SketchUP", "03_Entregables_PDF", "04_Modelo_BIM_Revit", "05_Varios"],
@@ -461,7 +463,7 @@ window.toggleCarpeta = function (carpetaId) {
 };
 
 window.seleccionarSubcarpeta = function (ruta, nombre) {
-  console.log('🔍 seleccionarSubcarpeta llamado:', { ruta, nombre });
+  Logger.debug('seleccionarSubcarpeta llamado:', { ruta, nombre });
 
   // Emitir evento para que otros componentes sepan qué subcarpeta se seleccionó
   const evento = new CustomEvent('subcarpetaSeleccionada', {
@@ -469,8 +471,5 @@ window.seleccionarSubcarpeta = function (ruta, nombre) {
   });
   document.dispatchEvent(evento);
 
-  console.log('✅ Evento subcarpetaSeleccionada despachado');
-
-  // Actualizar UI para mostrar archivos de esta subcarpeta
-  console.log('Subcarpeta seleccionada:', ruta, nombre);
+  Logger.debug('Evento subcarpetaSeleccionada despachado');
 };

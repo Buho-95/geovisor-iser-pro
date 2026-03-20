@@ -6,6 +6,7 @@ import { signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { auth, db } from './firebase.js';
 import { state, setUser } from '../core/state.js';
+import { Logger } from '../core/logger.js';
 import { COLLECTIONS } from '../core/config.js';
 
 // ═══════════════════════════════════════════════════════
@@ -30,7 +31,7 @@ function enforceAuthGuard() {
   document.getElementById('btn-logout')?.classList.add('hidden');
   document.getElementById('btn-exit-visitor')?.classList.add('hidden');
 
-  console.log('🔐 Auth Guard: Sesión inválida — redirigido a Login.');
+  Logger.info('🔐 Auth Guard: Sesión inválida — redirigido a Login.');
 }
 
 /**
@@ -54,8 +55,8 @@ export function initAuth(callbacks = {}) {
 
   // 🛡️ Persistencia de SESIÓN — al cerrar navegador/pestaña, la sesión expira
   setPersistence(auth, browserSessionPersistence)
-    .then(() => console.log('🛡️ Persistencia configurada: SESSION (se destruye al cerrar pestaña/navegador)'))
-    .catch(err => console.error('❌ Error configurando persistencia:', err));
+    .then(() => Logger.info('🛡️ Persistencia configurada: SESSION'))
+    .catch(err => Logger.error('❌ Error configurando persistencia:', err));
 
   const form = document.getElementById('login-form');
   const btnVisitor = document.getElementById('btn-visitor');
@@ -96,7 +97,7 @@ export function initAuth(callbacks = {}) {
 
         onLoginSuccess?.();
       } catch (error) {
-        console.error("Error en Visitor Login:", error);
+        Logger.error("Error en Visitor Login:", error);
         alert("No se pudo iniciar sesión como visitante. Por favor, intenta de nuevo.");
       } finally {
         btnVisitor.innerHTML = originalText;
@@ -147,7 +148,7 @@ export function initAuth(callbacks = {}) {
         document.getElementById('app-container').classList.add('visible');
         onLoginSuccess?.();
       } catch (error) {
-        console.error(error);
+        Logger.error('Error en login admin:', error);
         const errEl = document.getElementById('login-error');
         errEl.innerText = 'Credenciales inválidas o correo no registrado.';
         errEl.classList.remove('hidden');
@@ -175,7 +176,7 @@ export function initAuth(callbacks = {}) {
 
     try {
       await signOut(auth);
-    } catch(e) { console.error('Error signing out', e); }
+    } catch(e) { Logger.error('Error signing out', e); }
 
     // Refresco total — elimina todo rastro de sesión en memoria
     location.reload();
@@ -194,7 +195,7 @@ export function initAuth(callbacks = {}) {
 
   // ─── Auth State Observer (maneja persistencia de Admin en F5) ───
   onAuthStateChanged(auth, async (u) => {
-    console.log("Estado de Auth:", u);
+    Logger.debug("Estado de Auth:", u);
     state.user = u;
     setUser(u);
 
@@ -282,10 +283,14 @@ export function initAuth(callbacks = {}) {
   // 🔐 VERIFICACIÓN PERIÓDICA DE SESIÓN (cada 5 segundos)
   // Detecta si el estado de React dice "admin" pero Firebase ya no tiene sesión
   // ═══════════════════════════════════════════════════════
-  setInterval(() => {
+  const sessionCheckId = setInterval(() => {
     if (state.userRole === 'admin' && !auth.currentUser) {
-      console.warn('🔐 Verificación periódica: sesión admin inválida detectada');
+      Logger.warn('🔐 Verificación periódica: sesión admin inválida detectada');
+      clearInterval(sessionCheckId);
       enforceAuthGuard();
+    } else if (!state.userRole) {
+      // User logged out, stop polling
+      clearInterval(sessionCheckId);
     }
   }, 5000);
 }

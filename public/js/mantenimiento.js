@@ -10,6 +10,7 @@ import { getFilesInPath } from './services/fileMapper.js';
 import { guardarEstadoBloque } from './services/firestore.js';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { on, EVENTS } from './core/events.js';
+import { Logger } from './core/logger.js';
 
 // ─── DOM References ───
 let formEl, bloqueSelect, estadoSelect, fechaInput;
@@ -223,7 +224,7 @@ IMPORTANTE PARA EL JSON: Asigna valores numéricos reales (0-100) en todos los s
       try {
         parsedJson = JSON.parse(cleanJsonStr);
       } catch(e) {
-        console.warn("Fallo al parsear JSON devuelto por Gemini:", e, cleanJsonStr);
+        Logger.warn("Fallo al parsear JSON devuelto por Gemini:", e, cleanJsonStr);
       }
       // Aseguramos que el diagnóstico nunca salga vacío
       if (!narrative || narrative.trim() === '') {
@@ -241,7 +242,7 @@ IMPORTANTE PARA EL JSON: Asigna valores numéricos reales (0-100) en todos los s
       const result = await model.generateContent(parts);
       return parseResponse(result.response.text());
     } catch (e1) {
-      console.warn("Gemini 2.5 Flash falló, intentando fallback a 1.5-flash-latest...", e1);
+      Logger.warn("Gemini 2.5 Flash falló, intentando fallback a 1.5-flash-latest...", e1);
       
       // Intento 2: Fallback al modelo 1.5 Flash Latest
       const fallbackModel = genAI.getGenerativeModel(
@@ -252,7 +253,7 @@ IMPORTANTE PARA EL JSON: Asigna valores numéricos reales (0-100) en todos los s
       return parseResponse(result.response.text());
     }
   } catch (error) {
-    console.error("Gemini SDK Error Final:", error);
+    Logger.error("Gemini SDK Error Final:", error);
     throw new Error("Error procesando analítica predictiva. Revisa consola.");
   }
 }
@@ -354,7 +355,7 @@ function exportarInformeOficial() {
           imgData3D = canvas3D.toDataURL('image/jpeg', 0.9);
       }
   } catch (e) {
-      console.warn("No se pudo extraer el Canvas 3D. Usando fallback.", e);
+      Logger.warn("No se pudo extraer el Canvas 3D. Usando fallback.", e);
       imgData3D = null;
   }
 
@@ -601,7 +602,7 @@ function initMantenimiento() {
       bloqueSelect.appendChild(opt);
     }
   } catch (err) {
-    console.error("Error poblando bloques en Mantenimiento:", err);
+    Logger.error("Error poblando bloques en Mantenimiento:", err);
     bloqueSelect.innerHTML = `<option value="">Error interno: ${err.message}</option>`;
   }
 
@@ -675,6 +676,7 @@ function initMantenimiento() {
 
     if (currentSpinnerOverlay) currentSpinnerOverlay.style.display = 'flex';
     targetBtnIA.disabled = true;
+    targetBtnIA.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Analizando con IA...';
     
     // UI Feedback requested by user
     if (currentDiagnosticoArea) {
@@ -700,12 +702,12 @@ function initMantenimiento() {
           radar_scores: diagnosisData.radar_scores,
           timestamp: Date.now()
         });
-        console.log("Estado de bloque sincronizado en Firestore correctamente.");
+        Logger.info("Estado de bloque sincronizado en Firestore correctamente.");
       } catch (err) {
-        console.error("No se pudo guardar el estado en Firestore:", err);
+        Logger.error("No se pudo guardar el estado en Firestore:", err);
       }
     } catch (errApi) {
-      console.error("Gemini Execution Error:", errApi);
+      Logger.error("Gemini Execution Error:", errApi);
       // Explicit error rendering requested
       if (currentDiagnosticoArea) {
         currentDiagnosticoArea.value = "Error de conexión con la IA: " + (errApi.message || "Fallo desconocido.");
@@ -714,6 +716,7 @@ function initMantenimiento() {
       if (currentSpinnerOverlay) currentSpinnerOverlay.style.display = 'none';
       const spinnerText = document.querySelector('.mant-spinner-text');
       if (spinnerText) spinnerText.textContent = "Analizando planos y fotografías del bloque...";
+      targetBtnIA.innerHTML = '<i class="ph ph-robot"></i> Generar Diagnóstico con IA';
       targetBtnIA.disabled = false;
     }
   });
@@ -730,7 +733,7 @@ function initMantenimiento() {
     exportarInformeOficial();
   });
 
-  console.log('🔧 Módulo de Mantenimiento inicializado.');
+  Logger.info('Módulo de Mantenimiento inicializado.');
 }
 
 // Global exposure as requested by user to avoid Export Syntax Errors

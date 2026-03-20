@@ -6,6 +6,7 @@
 import { getCampusData, getSedeConfig } from './campus-data.js';
 import { emit, EVENTS, on } from './core/events.js';
 import { state } from './core/state.js';
+import { Logger } from './core/logger.js';
 
 let map = null;
 let perimetroPolygon = null;
@@ -245,7 +246,7 @@ function _drawSede(sedeId, onBlockSelect) {
     );
 
     polygon.on('click', (e) => {
-      console.log("Clic detectado en bloque:", id, "coordenadas:", e?.latlng);
+      Logger.debug("Clic en bloque:", id, "coords:", e?.latlng);
       onBlockSelect?.(id);
     });
     polygon.on('mouseover', function () {
