@@ -141,6 +141,15 @@ export function initLeafletMap(onBlockSelect) {
     }
   });
 
+  // Escucha de evento CustomEvent emitido por auditoria-normativa.js
+  window.addEventListener('updateMapColor', (e) => {
+    const { blockId, color } = e.detail;
+    const poly = mapPolygons[blockId];
+    if (poly) {
+      poly.setStyle({ fillColor: color, color: color, fillOpacity: 0.8, weight: 3 });
+    }
+  });
+
   emit(EVENTS.MAP_READY, map);
 }
 

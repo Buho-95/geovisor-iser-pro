@@ -97,17 +97,7 @@ function renderShell(stats) {
       <div class="dash-progress-title">Progreso por Especialidad</div>
       ${barsHtml}
     </div>
-
-    <button type="button" class="btn-report" id="btn-gen-report">
-      <i class="ph ph-file-pdf"></i>
-      Generar Reporte de Gestión (PDF)
-    </button>
   `.trim();
-
-  // Wire report button
-  document.getElementById('btn-gen-report')?.addEventListener('click', () => {
-    alert('Funcionalidad de generación de reporte en desarrollo.');
-  });
 }
 
 /** Render donut chart with Chart.js */

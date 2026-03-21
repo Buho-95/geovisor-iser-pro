@@ -3156,3 +3156,53 @@ canvas {
   color: var(--text-secondary);
   letter-spacing: 0.02em;
 }
+/* --- Módulo de Auditoría Normativa (Fase 2) --- */
+.audit-card { margin-top: 2rem; padding: 1.5rem; background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); position: relative; overflow: hidden; }
+.audit-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+.audit-header-icon { width: 42px; height: 42px; background: rgba(0, 229, 255, 0.1); color: var(--cyan); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+.audit-title { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin: 0; }
+.audit-subtitle { font-size: 0.78rem; color: var(--text-muted); margin: 4px 0 0 0; }
+.audit-controls { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: flex-end; margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-subtle); }
+.audit-label { display: block; font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; }
+.audit-select { width: 100%; background: var(--midnight-mid); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 10px 12px; color: var(--text-primary); font-size: 0.85rem; outline: none; transition: border-color 0.2s; }
+.audit-select:focus { border-color: var(--cyan); }
+.audit-btn { background: linear-gradient(135deg, var(--cyan), #0091ea); border: none; border-radius: var(--radius-md); color: white; padding: 10px 20px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; height: 42px; }
+.audit-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 229, 255, 0.3); opacity: 0.9; }
+.audit-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
+.audit-results { animation: fadeIn 0.4s ease-out; }
+.audit-score-strip { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+.audit-semaforo { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2); padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border-subtle); }
+.audit-semaforo-dot { width: 10px; height: 10px; border-radius: 50%; }
+.audit-semaforo-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; }
+.audit-score-value { font-size: 1.75rem; font-weight: 800; }
+.audit-resumen { font-size: 0.88rem; line-height: 1.6; color: var(--text-secondary); margin-bottom: 1.5rem; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; border-left: 3px solid var(--cyan); }
+.audit-normas-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+.audit-norma-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1rem; }
+.audit-norma-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.audit-norma-icon { font-size: 1.1rem; }
+.audit-norma-name { font-size: 0.85rem; font-weight: 700; color: var(--text-primary); flex: 1; }
+.audit-norma-score { font-size: 0.9rem; font-weight: 800; }
+.audit-norma-bar { height: 6px; background: rgba(255,255,255,0.05); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.audit-norma-bar-fill { height: 100%; border-radius: 10px; transition: width 1s ease-out; }
+.audit-norma-obs { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4; }
+.audit-doc-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.audit-doc-tag { font-size: 0.65rem; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-weight: 600; }
+.audit-doc-tag.found { background: rgba(16, 185, 129, 0.1); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.2); }
+.audit-doc-tag.missing { background: rgba(239, 68, 68, 0.1); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+.audit-tasks-section { background: rgba(239, 68, 68, 0.05); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem; }
+.audit-tasks-title { font-size: 0.85rem; font-weight: 700; color: #EF4444; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.audit-task-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.audit-task-item { display: flex; align-items: flex-start; gap: 10px; }
+.audit-task-priority { font-size: 0.6rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; margin-top: 2px; }
+.audit-task-desc { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4; }
+.audit-inventario-badge { font-size: 0.7rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.1); padding: 8px 12px; border-radius: 8px; }
+.audit-timestamp { opacity: 0.6; }
+.audit-spinner-overlay { position: absolute; inset: 0; background: rgba(11, 18, 32, 0.85); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 10; border-radius: var(--radius-lg); }
+.audit-spinner-content { text-align: center; }
+.audit-spinner-ring { width: 40px; height: 40px; border: 3px solid rgba(0, 229, 255, 0.1); border-top-color: var(--cyan); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+.audit-spinner-text { font-size: 0.85rem; color: var(--text-primary); font-weight: 600; }
+.audit-empty-state, .audit-error-state { padding: 2.5rem 1rem; text-align: center; }
+.audit-empty-hint, .audit-error-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+

@@ -1,6 +1,14 @@
 /**
- * Servicio Firebase: inicialización de Auth, Firestore, Storage.
- * Incluye App Check con detección automática de fallos.
+ * Servicio Firebase: inicialización de Auth, Firestore, Storage y App Check.
+ *
+ * NOTA TÉCNICA: En ES Modules, los `import` se izan (hoisting) antes de que
+ * cualquier código del archivo se ejecute. Por eso `self.FIREBASE_APPCHECK_DEBUG_TOKEN`
+ * debe configurarse desde un <script> clásico en el HTML, ANTES de cargar este módulo.
+ *
+ * El HTML ya incluye (o debe incluir) lo siguiente ANTES del <script type="module">:
+ *   <script>self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;</script>
+ *
+ * Este archivo simplemente consume ese valor sin condiciones.
  */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -12,32 +20,33 @@ import { Logger } from '../core/logger.js';
 
 const app = initializeApp(firebaseConfig);
 
-// ── App Check: solo activa debug token en localhost ──
-const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-if (isDev) {
-  self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-}
+
+// ⚠️ Reemplaza con tu clave real de ReCAPTCHA v3 (solo usada en producción).
+// Cuando debug token está activo, Firebase ignora la clave de sitio.
+// Obtenla en: https://www.google.com/recaptcha/admin
+const RECAPTCHA_SITE_KEY = 'TU_CLAVE_PUBLICA_RECAPTCHA_V3_AQUI';
 
 let appCheckInstance = null;
 try {
   appCheckInstance = initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider('CLAVE_PUBLICA_RECAPTCHA_V3'),
+    provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
     isTokenAutoRefreshEnabled: true
   });
-  Logger.info('Firebase App Check inicializado.');
+  Logger.info('✅ Firebase App Check inicializado.');
 } catch (e) {
-  Logger.warn('App Check no pudo inicializarse:', e.message);
+  Logger.warn('⚠️ App Check no pudo inicializarse:', e.message);
 }
 
 // ── Detección proactiva de fallos en App Check ──
-// Intenta obtener un token; si falla (403/network), notifica discretamente al admin.
 if (appCheckInstance) {
   getToken(appCheckInstance, /* forceRefresh */ false)
-    .then(() => Logger.debug('App Check token obtenido correctamente.'))
+    .then(() => Logger.info('✅ App Check token obtenido correctamente.'))
     .catch(err => {
       Logger.warn('⚠️ App Check token falló:', err.message);
-      // Mostrar aviso discreto al admin (no bloquea la app)
       setTimeout(() => {
+        if (document.body.classList.contains('visitor-mode')) return;
+        const existing = document.getElementById('appcheck-warning-banner');
+        if (existing) return;
         const banner = document.createElement('div');
         banner.id = 'appcheck-warning-banner';
         banner.style.cssText = `
@@ -51,15 +60,11 @@ if (appCheckInstance) {
         `;
         banner.innerHTML = `
           <i class="ph ph-shield-warning" style="font-size:1.2rem;flex-shrink:0;"></i>
-          <span>App Check: token no válido. Algunas funciones de Firebase pueden estar restringidas.</span>
+          <span>App Check: token no válido. Registra el Debug Token en Firebase Console.</span>
           <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#1a1a2e;cursor:pointer;font-size:1.1rem;padding:0 0 0 8px;flex-shrink:0;">✕</button>
         `;
-        // Solo mostrar si estamos autenticados como admin
-        if (document.body.classList.contains('visitor-mode') === false) {
-          document.body.appendChild(banner);
-          // Auto-dismiss after 15s
-          setTimeout(() => banner.remove(), 15000);
-        }
+        document.body.appendChild(banner);
+        setTimeout(() => banner?.remove(), 20000);
       }, 2000);
     });
 }
@@ -67,3 +72,4 @@ if (appCheckInstance) {
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+

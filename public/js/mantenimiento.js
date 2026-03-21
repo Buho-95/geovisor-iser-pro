@@ -341,9 +341,10 @@ function renderContextSummary(blockId) {
 /**
  * Generate PDF report using jsPDF.
  */
-function exportarInformeOficial() {
-  if (!window.jspdf || !window.jspdf.jsPDF) {
-    alert('Error crítico: La librería de reportes no cargó. Verifica que no tengas un bloqueador de publicidad activado.');
+function generatePDF() {
+  if (typeof window.jspdf === 'undefined' && typeof window.jsPDF === 'undefined') {
+    console.error('Librería jsPDF no cargada');
+    alert('Error crítico: La librería jsPDF no ha sido cargada correctamente.');
     return;
   }
 
@@ -361,17 +362,18 @@ function exportarInformeOficial() {
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-  const currentBloqueSelect = document.getElementById('mant-bloque');
-  const currentEstadoSelect = document.getElementById('mant-estado');
-  const currentFechaInput = document.getElementById('mant-fecha');
-
-  const blockId = currentBloqueSelect ? currentBloqueSelect.value : '';
+  
+  // Update to new single unified select:
+  const currentBloqueSelect = document.getElementById('audit-bloque-select') || document.getElementById('global-block-dropdown');
+  const blockId = currentBloqueSelect ? currentBloqueSelect.value : (state.currentBlockId || '');
+  
   const campusData = getCampusData();
   const blockName = campusData?.[blockId]?.name || blockId;
   const blockInfo = campusData?.[blockId]?.info || {};
   const context = getContextForAI(blockId);
-  const estado = currentEstadoSelect ? currentEstadoSelect.value : '';
-  const fecha = currentFechaInput ? currentFechaInput.value : 'No registrada';
+  const estadoData = state.estadosBloques?.[blockId] || {};
+  
+  const fecha = new Date().toLocaleDateString('es-CO');
 
   // ── Header ──
   doc.setFillColor(46, 125, 50);
@@ -380,12 +382,12 @@ function exportarInformeOficial() {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('ISER — Informe de Mantenimiento', 14, 16);
+  doc.text('ISER — Informe de Gestión y Cumplimiento', 14, 16);
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text('Instituto Superior de Educación Rural', 14, 24);
-  doc.text(`Fecha de generación: ${new Date().toLocaleDateString('es-CO')}`, 14, 30);
+  doc.text(`Fecha de generación: ${fecha}`, 14, 30);
 
   // ── Block Info ──
   doc.setTextColor(30, 30, 30);
@@ -396,13 +398,13 @@ function exportarInformeOficial() {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   const infoY = 58;
-  doc.text(`Estado General: ${estado.toUpperCase()}`, 14, infoY);
-  doc.text(`Última Inspección: ${fecha}`, 14, infoY + 6);
-  doc.text(`Área: ${blockInfo.area || '--'} m²  |  Recintos: ${blockInfo.rooms || '--'}`, 14, infoY + 12);
-  doc.text(`Construcción: ${blockInfo.construction || '--'}  |  Cubierta: ${blockInfo.roof || '--'}`, 14, infoY + 18);
+  const scoreBadge = estadoData.score_infraestructura ? `Score Global: ${estadoData.score_infraestructura}%` : 'Auditoría no realizada';
+  doc.text(`Estado Analítico: ${scoreBadge}`, 14, infoY);
+  doc.text(`Área: ${blockInfo.area || '--'} m²  |  Recintos: ${blockInfo.rooms || '--'}`, 14, infoY + 6);
+  doc.text(`Construcción: ${blockInfo.construction || '--'}  |  Cubierta: ${blockInfo.roof || '--'}`, 14, infoY + 12);
 
   // ── INYECCIÓN EN EL PDF (jsPDF) - Fotografía del modelo 3D ──
-  const snapshotY = infoY + 28;
+  const snapshotY = infoY + 22;
   const snapWidth = 100;
   const snapHeight = 60;
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -435,65 +437,19 @@ function exportarInformeOficial() {
   doc.setTextColor(30, 30, 30);
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Diagnóstico de la IA', marginX, diagY);
+  doc.text('Desarrollo del Análisis Normativo', marginX, diagY);
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  const currentDiagnosticoArea = document.getElementById('mant-diagnostico');
-  const diagText = currentDiagnosticoArea?.value || 'Sin diagnóstico generado.';
+  const diagText = estadoData.diagnostico_texto || 'Sin diagnóstico generado. Ejecute la auditoría de IA.';
   const diagLines = diagText.split('\n');
   const splitDiag = doc.splitTextToSize(diagLines, 210 - marginX * 2);
   doc.text(splitDiag, marginX, diagY + 8);
 
   let currentY = diagY + 10 + (splitDiag.length * 4);
 
-  // ── Charts (Analítica) ──
-  const chartContainer = document.getElementById('mant-charts-container');
-  if (chartContainer && chartContainer.style.display !== 'none') {
-    // 1. SALTO DE PÁGINA INTELIGENTE PARA EL RADAR
-    if (currentY + 110 > maxPageY) {
-      doc.addPage();
-      currentY = 20;
-    }
-
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Analítica Predictiva (Radar NTC 6047)', marginX, currentY);
-
-    const canvasRadar = document.getElementById('mant-chart-radar');
-    let hasCharts = false;
-
-    if (canvasRadar) {
-      // Create a temporary high-res canvas
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      const scaleFactor = 3; // Increase resolution by 3x
-      
-      tempCanvas.width = canvasRadar.width * scaleFactor;
-      tempCanvas.height = canvasRadar.height * scaleFactor;
-      tempCtx.scale(scaleFactor, scaleFactor);
-      
-      // Fill with solid background so text is readable
-      tempCtx.fillStyle = '#111827'; // var(--midnight)
-      tempCtx.fillRect(0, 0, canvasRadar.width, canvasRadar.height);
-      tempCtx.drawImage(canvasRadar, 0, 0);
-
-      const imgRadar = tempCanvas.toDataURL('image/png', 1.0);
-      
-      // 2. RESPETO DE MÁRGENES LATERALES
-      const chartWidth = 100;
-      const chartX = (210 - chartWidth) / 2;
-      doc.addImage(imgRadar, 'PNG', chartX, currentY + 6, chartWidth, chartWidth);
-      hasCharts = true;
-    }
-
-    if (hasCharts) {
-      currentY += 116; // 6 + 100 + 10 padding
-    }
-  }
-
   // ── Recomendaciones ──
-  let recoY = currentY;
+  let recoY = currentY + 10;
   if (recoY + 20 > maxPageY) {
     doc.addPage();
     recoY = 20;
@@ -501,25 +457,31 @@ function exportarInformeOficial() {
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Recomendaciones Técnicas', marginX, recoY);
+  doc.text('Puntajes de Cumplimiento (Normas)', marginX, recoY);
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  const currentRecomendacionesArea = document.getElementById('mant-recomendaciones');
-  const recoText = currentRecomendacionesArea?.value || 'Sin recomendaciones adicionales.';
-  const recoLines = recoText.split('\n');
-  const splitReco = doc.splitTextToSize(recoLines, 210 - marginX * 2);
-  doc.text(splitReco, marginX, recoY + 8);
+  
+  if (estadoData.radar_scores) {
+    let i = 0;
+    Object.entries(estadoData.radar_scores).forEach(([norma, pct]) => {
+      doc.text(`- ${norma}: ${pct}%`, marginX + 4, recoY + 8 + (i * 6));
+      i++;
+    });
+    currentY = recoY + 10 + (i * 6);
+  } else {
+    doc.text('No hay datos normativos disponibles.', marginX, recoY + 8);
+    currentY = recoY + 14;
+  }
 
   // ── File Table (Summary Format) ──
   if (context.files.length > 0) {
-    let tableY = recoY + 12 + (splitReco.length * 4);
-    if (tableY + 30 > maxPageY) { // Estimación básica antes de tabla
+    let tableY = currentY + 10;
+    if (tableY + 30 > maxPageY) {
       doc.addPage();
       tableY = 20;
     }
 
-    // Group files by folder
     const folderGroups = {};
     context.files.forEach(f => {
       if (!folderGroups[f.carpeta]) folderGroups[f.carpeta] = [];
@@ -530,20 +492,18 @@ function exportarInformeOficial() {
     Object.entries(folderGroups).forEach(([folder, files]) => {
       const count = files.length;
       if (count < 5) {
-        // Less than 5 files: list them individually
         tableData.push([{ content: folder, rowSpan: count }, files[0].nombre, 'Disponible']);
         for (let i = 1; i < count; i++) {
           tableData.push([files[i].nombre, 'Disponible']);
         }
       } else {
-        // 5 or more files: summarize
         tableData.push([folder, `${count} archivo(s) en total`, 'Completo']);
       }
     });
 
     doc.autoTable({
       startY: tableY,
-      head: [['Categoría / Carpeta', 'Documentación', 'Estado Info']],
+      head: [['Categoría / Carpeta', 'Documentación Detectada', 'Estado']],
       body: tableData,
       styles: { fontSize: 9, cellPadding: 3 },
       headStyles: { fillColor: [46, 125, 50], textColor: 255, fontStyle: 'bold' },
@@ -565,7 +525,7 @@ function exportarInformeOficial() {
     );
   }
 
-  doc.save(`Informe_Mantenimiento_${blockId}.pdf`);
+  doc.save(`Reporte_Gestion_Normativa_${blockId}.pdf`);
 }
 
 /**
@@ -717,24 +677,30 @@ function initMantenimiento() {
       const spinnerText = document.querySelector('.mant-spinner-text');
       if (spinnerText) spinnerText.textContent = "Analizando planos y fotografías del bloque...";
       targetBtnIA.innerHTML = '<i class="ph ph-robot"></i> Generar Diagnóstico con IA';
-      targetBtnIA.disabled = false;
     }
-  });
-
-  // ── Export PDF ──
-  document.addEventListener('click', (e) => {
-    const targetBtnPDF = e.target.closest('#mant-btn-pdf');
-    if (!targetBtnPDF) return;
-    
-    const currentBloqueSelect = document.getElementById('mant-bloque');
-    const blockId = currentBloqueSelect ? currentBloqueSelect.value : null;
-    if (!blockId) return;
-    
-    exportarInformeOficial();
   });
 
   Logger.info('Módulo de Mantenimiento inicializado.');
 }
+
+// Global event listener for PDF generation (Event Delegation as requested)
+document.addEventListener('click', (e) => {
+  const targetBtnPDF = e.target.closest('#btn-generate-pdf');
+  if (!targetBtnPDF && e.target.id !== 'btn-generate-pdf') return;
+  
+  // Ojo: soportar la clase clickeada o el ID
+  
+  const currentBloqueSelect = document.getElementById('audit-bloque-select') || document.getElementById('global-block-dropdown');
+  const blockId = currentBloqueSelect ? currentBloqueSelect.value : state.currentBlockId;
+  
+  if (!blockId) {
+    alert("Por favor, selecciona un bloque antes de generar el reporte.");
+    return;
+  }
+  
+  console.log("Iniciando exportación para:", blockId);
+  generatePDF();
+});
 
 // Global exposure as requested by user to avoid Export Syntax Errors
 window.initMantenimiento = initMantenimiento;

@@ -140,13 +140,6 @@ export async function bootstrap() {
       document.querySelector('[data-panel="visor"]')?.classList.add('active');
       document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
       document.getElementById('panel-visor')?.classList.add('active');
-    } else if (moduleId === 'mantenimiento') {
-      // Show the full layout but activate Mantenimiento panel
-      if (appMain) appMain.style.display = '';
-      if (panelTabs) panelTabs.style.display = '';
-      document.querySelectorAll('.panel-tab').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
-      document.getElementById('panel-mantenimiento')?.classList.add('active');
     } else if (moduleId === 'dashboard') {
       // Show the full layout but activate Dashboard panel tab
       if (appMain) appMain.style.display = '';
@@ -230,7 +223,7 @@ export async function bootstrap() {
   });
 
   // Lazy load: Mantenimiento Module
-  if (document.getElementById('mant-form')) {
+  if (document.getElementById('btn-generate-pdf')) {
     try {
       await import('./mantenimiento.js');
       if (typeof window.initMantenimiento === 'function') {
@@ -255,7 +248,16 @@ export async function bootstrap() {
     }
   }
 
+  // Lazy load: Auditoría Normativa (Fase 2 - Dashboard)
+  try {
+    const { initAuditoriaNormativa } = await import('./auditoria-normativa.js');
+    initAuditoriaNormativa();
+  } catch (e) {
+    Logger.error('❌ Error cargando Módulo de Auditoría Normativa:', e);
+  }
+
   // ═══════════════════════════════════════════════════════
+
   // ⌨️ GLOBAL ESC KEY — Closes whichever modal is open (priority order)
   // Visor modal Esc is already handled in visor.js; this covers the rest.
   // ═══════════════════════════════════════════════════════
