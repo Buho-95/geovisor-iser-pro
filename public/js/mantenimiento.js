@@ -338,15 +338,20 @@ function renderContextSummary(blockId) {
   contextList.innerHTML = html;
 }
 
+const LOGO_ISER_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="; // Pega aquí el código base64 completo o ignóralo. El espacio se mantendrá.
+
 /**
  * Generate PDF report using jsPDF.
  */
 function generatePDF() {
-  if (typeof window.jspdf === 'undefined' && typeof window.jsPDF === 'undefined') {
-    console.error('Librería jsPDF no cargada');
-    alert('Error crítico: La librería jsPDF no ha sido cargada correctamente.');
-    return;
-  }
+  const fecha = new Date().toLocaleDateString('es-CO');
+  
+  try {
+    if (typeof window.jspdf === 'undefined' && typeof window.jsPDF === 'undefined') {
+      console.error('Librería jsPDF no cargada');
+      alert('Error crítico: La librería jsPDF no ha sido cargada correctamente.');
+      return;
+    }
 
   // 1. CAPTURA DEL CANVAS 3D
   let imgData3D = null;
@@ -363,115 +368,152 @@ function generatePDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   
-  // Update to new single unified select:
-  const currentBloqueSelect = document.getElementById('audit-bloque-select') || document.getElementById('global-block-dropdown');
-  const blockId = currentBloqueSelect ? currentBloqueSelect.value : (state.currentBlockId || '');
+  // Usar exclusivamente el ID del bloque del estado (Evita capturar 'admin' accidentalmente)
+  const blockId = state.currentBlockId || 'bloque-desconocido';
   
-  const campusData = getCampusData();
-  const blockName = campusData?.[blockId]?.name || blockId;
+  const campusData = getCampusData() || {};
+  const blockName = campusData?.[blockId]?.name || blockId || 'Nombre no disponible';
   const blockInfo = campusData?.[blockId]?.info || {};
-  const context = getContextForAI(blockId);
+  const context = getContextForAI(blockId) || { files: [] };
   const estadoData = state.estadosBloques?.[blockId] || {};
   
-  const fecha = new Date().toLocaleDateString('es-CO');
+  const marginX = 20;
+  const maxWidth = 170;
+  const maxPageY = 270;
+  
+  // ── Header & Logo ──
+  if (LOGO_ISER_BASE64) doc.addImage(LOGO_ISER_BASE64, 'PNG', 20, 15, 35, 15);
 
-  // ── Header ──
-  doc.setFillColor(46, 125, 50);
-  doc.rect(0, 0, 210, 38, 'F');
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
+  doc.setTextColor(46, 125, 50); // ISER Green
+  doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text('ISER — Informe de Gestión y Cumplimiento', 14, 16);
+  doc.text('Instituto Superior de Educación Rural', marginX + 40, 20);
+  doc.text('Informe de Gestión y Cumplimiento', marginX + 40, 26);
 
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Instituto Superior de Educación Rural', 14, 24);
-  doc.text(`Fecha de generación: ${fecha}`, 14, 30);
-
-  // ── Block Info ──
   doc.setTextColor(30, 30, 30);
-  doc.setFontSize(13);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text(`Bloque: ${blockName}`, 14, 50);
+  doc.text('Fecha de generación: ' + fecha, marginX + 40, 32);
+
+  let currentY = 45;
+
+  // ── Resumen Inicial Sombreado ──
+  doc.setFillColor(245, 245, 245);
+  doc.rect(marginX, currentY, maxWidth, 25, 'F');
+  
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`RESUMEN TÉCNICO - ${blockName.toUpperCase()}`, marginX + 5, currentY + 7);
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  const infoY = 58;
-  const scoreBadge = estadoData.score_infraestructura ? `Score Global: ${estadoData.score_infraestructura}%` : 'Auditoría no realizada';
-  doc.text(`Estado Analítico: ${scoreBadge}`, 14, infoY);
-  doc.text(`Área: ${blockInfo.area || '--'} m²  |  Recintos: ${blockInfo.rooms || '--'}`, 14, infoY + 6);
-  doc.text(`Construcción: ${blockInfo.construction || '--'}  |  Cubierta: ${blockInfo.roof || '--'}`, 14, infoY + 12);
+  const scoreBadge = estadoData.score_infraestructura ? `${estadoData.score_infraestructura}%` : 'N/A';
+  doc.text(`Área: ${blockInfo.area || '--'} m²`, marginX + 5, currentY + 14);
+  doc.text(`Sistema Constructivo: ${blockInfo.construction || '--'}`, marginX + 70, currentY + 14);
+  doc.text(`Recintos: ${blockInfo.rooms || '--'}`, marginX + 5, currentY + 20);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(46, 125, 50);
+  doc.text(`Score Global Normativo: ${scoreBadge}`, marginX + 70, currentY + 20);
+
+  currentY += 35;
 
   // ── INYECCIÓN EN EL PDF (jsPDF) - Fotografía del modelo 3D ──
-  const snapshotY = infoY + 22;
-  const snapWidth = 100;
-  const snapHeight = 60;
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const snapX = (pageWidth - snapWidth) / 2;
-
   if (imgData3D) {
-    doc.addImage(imgData3D, 'JPEG', snapX, snapshotY, snapWidth, snapHeight);
+    const snapWidth = 100;
+    const snapHeight = 60;
+    const snapX = (210 - snapWidth) / 2;
+    doc.addImage(imgData3D, 'JPEG', snapX, currentY, snapWidth, snapHeight);
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.5);
-    doc.rect(snapX, snapshotY, snapWidth, snapHeight); // Borde sutil
-  } else {
-    doc.setFillColor(230, 230, 230);
-    doc.rect(snapX, snapshotY, snapWidth, snapHeight, 'F');
-    doc.setTextColor(150, 150, 150);
-    doc.setFontSize(10);
-    doc.text('Modelo 3D no disponible', pageWidth / 2, snapshotY + (snapHeight / 2), { align: 'center', baseline: 'middle' });
+    doc.rect(snapX, currentY, snapWidth, snapHeight);
+    currentY += snapHeight + 10;
   }
-
-  const marginX = 14;
-  const maxPageY = 270;
 
   // ── Diagnóstico ──
-  let diagY = snapshotY + snapHeight + 15;
-  
-  if (diagY > maxPageY) {
-    doc.addPage();
-    diagY = 20;
-  }
+  if (currentY > maxPageY) { doc.addPage(); currentY = 20; }
+
+  doc.setTextColor(46, 125, 50);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Desarrollo del Análisis Normativo', marginX, currentY);
+  currentY += 8;
 
   doc.setTextColor(30, 30, 30);
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Desarrollo del Análisis Normativo', marginX, diagY);
-
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   const diagText = estadoData.diagnostico_texto || 'Sin diagnóstico generado. Ejecute la auditoría de IA.';
   const diagLines = diagText.split('\n');
-  const splitDiag = doc.splitTextToSize(diagLines, 210 - marginX * 2);
-  doc.text(splitDiag, marginX, diagY + 8);
+  const splitDiag = doc.splitTextToSize(diagLines, maxWidth);
+  // Interlineado base = 1.2 in jsPDF is often just standard rendering with spacing if we use lines spacing or draw line by line, splitTextToSize uses normal spacing which is close to 1.15.
+  doc.text(splitDiag, marginX, currentY);
+  currentY += (splitDiag.length * 5) + 8;
 
-  let currentY = diagY + 10 + (splitDiag.length * 4);
+  // ── Detalle Normativo ──
+  if (estadoData.normas && typeof doc.autoTable === 'function') {
+    Object.entries(estadoData.normas).forEach(([norma, data]) => {
+      if (currentY + 25 > maxPageY) { doc.addPage(); currentY = 20; }
+      
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 30, 30);
+      
+      const normaLimpia = norma.replace(/[%!&🛡️⚠️]/g, '').trim();
+      doc.text('NORMA: ' + normaLimpia + ' (PUNTAJE: ' + (data.puntaje || 0) + ')', marginX, currentY);
+      
+      let detectadosStr = (data.encontrados || []).length ? data.encontrados.join('\n') : 'Ninguno';
+      let faltantesStr = (data.faltantes_criticos || []).length ? data.faltantes_criticos.join('\n') : 'Ninguno';
+      
+      detectadosStr = detectadosStr.replace(/[%!&🛡️⚠️]/g, '');
+      faltantesStr = faltantesStr.replace(/[%!&🛡️⚠️]/g, '');
 
-  // ── Recomendaciones ──
-  let recoY = currentY + 10;
-  if (recoY + 20 > maxPageY) {
-    doc.addPage();
-    recoY = 20;
+      doc.autoTable({
+        startY: currentY + 4,
+        head: [['ESTADO OK', 'FALTANTES CRITICOS']],
+        body: [[detectadosStr, faltantesStr]],
+        theme: 'plain',
+        styles: { fontSize: 10, cellPadding: 3, font: 'helvetica' },
+        headStyles: { fontStyle: 'bold', textColor: [30, 30, 30] },
+        columnStyles: {
+          0: { textColor: [21, 128, 61], cellWidth: maxWidth / 2 },
+          1: { textColor: [220, 38, 38], cellWidth: maxWidth / 2 }
+        },
+        margin: { left: marginX, right: marginX }
+      });
+      currentY = doc.lastAutoTable.finalY + 10;
+    });
+  } else if (!estadoData.normas) {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('No hay datos normativos detallados disponibles.', marginX, currentY);
+    currentY += 10;
   }
 
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Puntajes de Cumplimiento (Normas)', marginX, recoY);
-
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  
-  if (estadoData.radar_scores) {
-    let i = 0;
-    Object.entries(estadoData.radar_scores).forEach(([norma, pct]) => {
-      doc.text(`- ${norma}: ${pct}%`, marginX + 4, recoY + 8 + (i * 6));
-      i++;
+  // ── Plan de Acción (Tareas Pendientes) ──
+  if (estadoData.tareas_pendientes && estadoData.tareas_pendientes.length > 0 && typeof doc.autoTable === 'function') {
+    if (currentY + 30 > maxPageY) { doc.addPage(); currentY = 20; }
+    
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(46, 125, 50);
+    doc.text('Plan de Acción Priorizado', marginX, currentY);
+    
+    const bodyTareas = estadoData.tareas_pendientes.map(t => [t.prioridad, t.descripcion]);
+    doc.autoTable({
+      startY: currentY + 6,
+      head: [['Prioridad', 'Descripción de la Tarea']],
+      body: bodyTareas,
+      styles: { fontSize: 10, cellPadding: 4, font: 'helvetica' },
+      headStyles: { fillColor: [46, 125, 50], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [240, 248, 240] },
+      margin: { left: marginX, right: marginX }
     });
-    currentY = recoY + 10 + (i * 6);
-  } else {
-    doc.text('No hay datos normativos disponibles.', marginX, recoY + 8);
-    currentY = recoY + 14;
+    currentY = doc.lastAutoTable.finalY + 15;
+  } else if (estadoData.tareas_pendientes && estadoData.tareas_pendientes.length > 0) {
+    // Fallback if autotable plugin fails
+    doc.setFontSize(10);
+    doc.text('Tareas pendientes registradas, pero falta AutoTable plugin para renderizar.', marginX, currentY + 10);
+    currentY += 15;
   }
 
   // ── File Table (Summary Format) ──
@@ -505,27 +547,59 @@ function generatePDF() {
       startY: tableY,
       head: [['Categoría / Carpeta', 'Documentación Detectada', 'Estado']],
       body: tableData,
-      styles: { fontSize: 9, cellPadding: 3 },
+      styles: { fontSize: 10, cellPadding: 4, font: 'helvetica' },
       headStyles: { fillColor: [46, 125, 50], textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [240, 248, 240] },
-      margin: { left: 14, right: 14 }
+      margin: { left: marginX, right: marginX }
     });
   }
+
+  // ── Sign Off ──
+  if (typeof doc.lastAutoTable !== 'undefined' && doc.lastAutoTable !== null && doc.lastAutoTable.finalY) {
+    currentY = doc.lastAutoTable.finalY + 15;
+  }
+
+  if (currentY > 260) { 
+    doc.addPage(); 
+    currentY = 20; 
+  } else {
+    currentY += 15; // Padding extra para alejar del contenido anterior
+  }
+  
+  const sigWidth = 70;
+  const sigX = 210 - marginX - sigWidth;
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.setLineDash([2, 2], 0);
+  doc.line(sigX, currentY, sigX + sigWidth, currentY);
+  doc.setLineDash([]); // Reset dash pattern
+  
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 30, 30);
+  doc.text('Arq. Pedro Johan Trillos Pérez', 210 - marginX, currentY + 6, { align: 'right' });
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Docente ISER', 210 - marginX, currentY + 11, { align: 'right' });
 
   // ── Footer ──
   const pageCount = doc.internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.setFontSize(7);
-    doc.setTextColor(150, 150, 150);
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
     doc.text(
-      `ISER - Geovisor CDE Institucional  |  Página ${i} de ${pageCount}`,
-      105, 290,
+      `ISER-Geovisor CDE Institucional | Página ${i} de ${pageCount}`,
+      105, 287,
       { align: 'center' }
     );
   }
 
-  doc.save(`Reporte_Gestion_Normativa_${blockId}.pdf`);
+    doc.save(`Reporte_Auditoria_Tecnica_${blockId}.pdf`);
+  } catch (error) {
+    console.error("Error al exportar PDF:", error);
+    alert("Hubo un error al generar el PDF. Verifica la consola para más detalles.");
+  }
 }
 
 /**
@@ -591,8 +665,21 @@ function initMantenimiento() {
       if (existingState) {
         diagnosticoArea.value = existingState.diagnostico_texto || '';
         renderMantCharts({ radar_scores: existingState.radar_scores });
+
+        // Sincronización en el Dashboard
+        const dashTextContainer = document.getElementById('audit-resumen');
+        if (dashTextContainer) {
+          const textoLimpiado = (existingState.diagnostico_texto || "Sin datos de auditoría.").replace(/[%!&🛡️⚠️]/g, '');
+          dashTextContainer.innerHTML = textoLimpiado;
+          dashTextContainer.style.overflowY = 'auto';
+          dashTextContainer.style.maxHeight = '250px';
+          dashTextContainer.style.paddingRight = '8px';
+          dashTextContainer.style.textAlign = 'justify';
+        }
       } else {
         renderMantCharts(null);
+        const dashTextContainer = document.getElementById('audit-resumen');
+        if (dashTextContainer) dashTextContainer.innerHTML = 'Sin datos de auditoría.';
       }
     } else {
       contextSummary.style.display = 'none';
@@ -650,6 +737,18 @@ function initMantenimiento() {
       if (currentDiagnosticoArea) {
         currentDiagnosticoArea.value = diagnosisData.diagnostico_texto || "No se generó texto de diagnóstico.";
       }
+      
+      // Sincronización de Diagnóstico en Dashboard (Regla de Oro)
+      const dashTextContainer = document.getElementById('audit-resumen');
+      if (dashTextContainer) {
+        const textoLimpiado = (diagnosisData.diagnostico_texto || "No se generó texto.").replace(/[%!&🛡️⚠️]/g, '');
+        dashTextContainer.innerHTML = textoLimpiado;
+        dashTextContainer.style.overflowY = 'auto';
+        dashTextContainer.style.maxHeight = '250px';
+        dashTextContainer.style.paddingRight = '8px';
+        dashTextContainer.style.textAlign = 'justify';
+      }
+
       renderMantCharts(diagnosisData);
 
       // Guardar el estado y color en Firestore
@@ -685,21 +784,17 @@ function initMantenimiento() {
 
 // Global event listener for PDF generation (Event Delegation as requested)
 document.addEventListener('click', (e) => {
-  const targetBtnPDF = e.target.closest('#btn-generate-pdf');
-  if (!targetBtnPDF && e.target.id !== 'btn-generate-pdf') return;
-  
-  // Ojo: soportar la clase clickeada o el ID
-  
-  const currentBloqueSelect = document.getElementById('audit-bloque-select') || document.getElementById('global-block-dropdown');
-  const blockId = currentBloqueSelect ? currentBloqueSelect.value : state.currentBlockId;
-  
-  if (!blockId) {
-    alert("Por favor, selecciona un bloque antes de generar el reporte.");
-    return;
+  if (e.target.closest('#btn-generate-pdf')) {
+    const blockId = state.currentBlockId;
+    
+    if (!blockId || blockId === 'admin' || blockId === 'visitor') {
+      alert("Por favor, selecciona un bloque en el mapa antes de generar el reporte.");
+      return;
+    }
+    
+    console.log("Iniciando exportación para:", blockId);
+    generatePDF();
   }
-  
-  console.log("Iniciando exportación para:", blockId);
-  generatePDF();
 });
 
 // Global exposure as requested by user to avoid Export Syntax Errors

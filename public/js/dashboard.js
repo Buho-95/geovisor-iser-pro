@@ -11,7 +11,10 @@ let containerEl = null;
 
 /** Compute file counts grouped by top-level specialty */
 function computeDashboardStats() {
-  const archivos = Array.isArray(state.archivosNube) ? state.archivosNube : [];
+  const blockId = state.currentBlockId;
+  const allArchivos = Array.isArray(state.archivosNube) ? state.archivosNube : [];
+  const archivos = allArchivos.filter(a => a?.bloque === blockId);
+  
   const keys = Object.keys(estructuraPlanimetriaISER);
 
   const byEsp = {};
@@ -21,11 +24,7 @@ function computeDashboardStats() {
     let carpeta = (a?.carpeta || '').split('/').filter(Boolean)[0];
     const secondFolder = (a?.carpeta || '').split('/').filter(Boolean)[1];
 
-    // Si la primera carpeta es un prefijo de sede, usar la segunda carpeta
-    if (carpeta && ['pamplona', 'rinconada', 'caldera'].includes(carpeta.toLowerCase())) {
-      carpeta = secondFolder;
-    }
-
+    // Asignación estricta de la primera carpeta (Nivel 1 de la Tabla Maestra)
     if (carpeta && byEsp.hasOwnProperty(carpeta)) {
       byEsp[carpeta]++;
     } else {
@@ -159,6 +158,19 @@ function renderChart(stats) {
 
 function render() {
   if (!containerEl) return;
+  
+  const blockId = state.currentBlockId;
+  if (!blockId || blockId === 'admin' || blockId === 'visitor') {
+    if (chartEspecialidades) {
+      try { chartEspecialidades.destroy(); } catch (e) {}
+      chartEspecialidades = null;
+    }
+    containerEl.innerHTML = '<div style="text-align:center; padding: 30px; color: #8892a8; font-size: 0.95rem;">Sincronizando información... Selecciona un Bloque en el Mapa.</div>';
+    return;
+  }
+
+  // Limpieza explícita del contenedor antes de inyectar datos del nuevo bloque
+  containerEl.innerHTML = ''; 
   const stats = computeDashboardStats();
   renderShell(stats);
   renderChart(stats);
@@ -169,5 +181,6 @@ export function initDashboardPro() {
   if (!containerEl) return;
 
   on(EVENTS.FIRESTORE_SYNC, () => render());
+  on(EVENTS.BLOCK_SELECTED, () => render());
   render();
 }

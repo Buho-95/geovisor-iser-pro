@@ -493,6 +493,24 @@ function renderPanelAuditoria() {
         });
       }
       state.estadosBloques[blockId].radar_scores = radar_scores;
+      state.estadosBloques[blockId].tareas_pendientes = auditResult.tareas_pendientes || [];
+      state.estadosBloques[blockId].normas = auditResult.normas || {};
+
+      // Save to Firestore for persistence across map reloads
+      try {
+        const { guardarEstadoBloque } = await import('./services/firestore.js');
+        await guardarEstadoBloque(blockId, {
+          diagnostico_texto: auditResult.resumen_ejecutivo,
+          score_infraestructura: score,
+          color_sugerido: colorSugerido,
+          radar_scores: radar_scores,
+          tareas_pendientes: auditResult.tareas_pendientes || [],
+          normas: auditResult.normas || {}
+        });
+        Logger.info(`Estado del bloque ${blockId} guardado con éxito en Firestore.`);
+      } catch (err) {
+        Logger.warn('No se pudo invocar o guardar persistencia en Firestore', err);
+      }
 
       // Enable the Generate PDF button
       const mantBtnPdf = document.getElementById('btn-generate-pdf');
@@ -558,7 +576,13 @@ function renderAuditResults(data) {
   // ── Resumen ejecutivo ──
   const resumen = document.getElementById('audit-resumen');
   if (resumen) {
-    resumen.textContent = data.resumen_ejecutivo || 'Sin resumen disponible.';
+    // Reemplaza los caracteres extraños si quedan y lo inyecta como HTML
+    const textoIA = (data.resumen_ejecutivo || 'Sin resumen disponible.').replace(/[%!&🛡️⚠️]/g, '');
+    resumen.innerHTML = textoIA;
+    resumen.style.overflowY = 'auto';
+    resumen.style.maxHeight = '250px';
+    resumen.style.paddingRight = '8px';
+    resumen.style.textAlign = 'justify';
   }
 
   // ── Normas grid ──

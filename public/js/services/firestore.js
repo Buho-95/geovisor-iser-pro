@@ -43,9 +43,22 @@ export function startArchivosSync(onUpdate) {
  * @returns {function} - Unsubscribe
  */
 export function startEstadosBloquesSync(onUpdate) {
+  // Manejo de 'Estado de Cumplimiento' o 'Cargando...'
+  const timeoutId = setTimeout(() => {
+    const statusEl = document.getElementById('estado-cumplimiento') || document.getElementById('audit-semaforo-label');
+    const scoreEl = document.getElementById('audit-score-value');
+    if (statusEl && (statusEl.innerText.includes('Cargando') || statusEl.innerText === '--')) {
+      statusEl.innerText = 'Sin datos de auditoría';
+    }
+    if (scoreEl && scoreEl.innerText === '--%') {
+      scoreEl.innerText = '0%';
+    }
+  }, 5000);
+
   return onSnapshot(
     collection(db, COLLECTIONS.ESTADOS_BLOQUES),
     (snapshot) => {
+      clearTimeout(timeoutId);
       const docs = {};
       snapshot.docs.forEach(d => {
         docs[d.id] = d.data();
@@ -55,7 +68,13 @@ export function startEstadosBloquesSync(onUpdate) {
       onUpdate?.();
     },
     (error) => {
+      clearTimeout(timeoutId);
       console.error('Firestore estados_bloques sync error:', error);
+      const statusEl = document.getElementById('estado-cumplimiento') || document.getElementById('audit-semaforo-label');
+      if (statusEl) {
+        statusEl.innerText = 'Error de conexión con la base de datos';
+        statusEl.style.color = '#EF4444'; // Rojo para error
+      }
       onUpdate?.();
     }
   );

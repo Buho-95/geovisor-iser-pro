@@ -12,7 +12,10 @@ let container = null;
  * Calcula estadísticas básicas desde archivosNube.
  */
 function computeStats() {
-  const archivos = state.archivosNube || [];
+  const blockId = state.currentBlockId;
+  const allArchivos = state.archivosNube || [];
+  const archivos = blockId && blockId !== 'admin' && blockId !== 'visitor' ? allArchivos.filter(a => String(a.bloque || '') === String(blockId)) : allArchivos;
+  
   const byBlock = {};
   const byType = {};
   archivos.forEach(a => {
@@ -150,6 +153,7 @@ export async function init() {
   if (!container) return;
 
   on(EVENTS.FIRESTORE_SYNC, render);
+  on(EVENTS.BLOCK_SELECTED, render);
   render();
 }
 

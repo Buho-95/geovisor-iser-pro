@@ -24,7 +24,8 @@ const app = initializeApp(firebaseConfig);
 // ⚠️ Reemplaza con tu clave real de ReCAPTCHA v3 (solo usada en producción).
 // Cuando debug token está activo, Firebase ignora la clave de sitio.
 // Obtenla en: https://www.google.com/recaptcha/admin
-const RECAPTCHA_SITE_KEY = 'TU_CLAVE_PUBLICA_RECAPTCHA_V3_AQUI';
+const RECAPTCHA_SITE_KEY = '6LdYAJMsAAAAAPhabJ2yXRSq_M-3WxfCiYJcypUe';
+self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
 
 let appCheckInstance = null;
 try {
