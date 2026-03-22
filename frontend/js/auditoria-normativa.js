@@ -1,9 +1,14 @@
 /**
- * Módulo de Auditoría de Integridad Normativa — Fase 2
- * =====================================================
+ * Módulo de Auditoría de Integridad Normativa — Fase 2 (Arquitectura Pro)
+ * =========================================================================
  * Módulo 100% AISLADO. Escanea archivos en Firebase Storage,
- * envía inventario a Gemini AI para auditoría normativa colombiana
- * (NSR-10, NTC 6047, RETIE), y renderiza resultados en el Dashboard.
+ * envía inventario a la Cloud Function 'getNormativeAudit' (backend seguro)
+ * para auditoría normativa colombiana (NSR-10, NTC 6047, RETIE),
+ * y renderiza resultados en el Dashboard.
+ *
+ * CAMBIO ARQUITECTÓNICO: La llamada a Gemini AI ya NO se hace desde el frontend.
+ * Se delega a /api/getNormativeAudit (Firebase Cloud Function).
+ * La API Key de Gemini está segura en Firebase Secret Manager.
  *
  * REGLAS DE ORO: Este módulo NO modifica ni referencia ninguna función
  * de mantenimiento.js (generateAIDiagnosis, renderMantCharts, exportarInformeOficial).
@@ -13,12 +18,12 @@ import { ref, listAll, getMetadata } from 'https://www.gstatic.com/firebasejs/11
 import { state } from './core/state.js';
 import { on, EVENTS } from './core/events.js';
 import { getCampusData } from './campus-data.js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Logger } from './core/logger.js';
 import { storageBasePath } from './core/config.js';
 
-// ─── API Key (aislada, no referencia mantenimiento.js) ───
-const GEMINI_API_KEY = 'AIzaSyBtW6xf9FLNN7j8wwy9jpg0PUuOaz6Vz-8';
+// ─── URL de la Cloud Function (relativa al mismo dominio en producción) ───
+// En desarrollo local, apunta al emulador de Firebase Functions.
+const AUDIT_FUNCTION_URL = '/api/getNormativeAudit';
 
 // ─── Normative Requirements Definition ───
 const REQUISITOS_NORMATIVOS = {
@@ -164,168 +169,31 @@ async function escanearArchivosBloque(blockId) {
 
 
 /**
- * 2. LÓGICA DE AUDITORÍA — Envía inventario a Gemini AI para evaluación normativa.
- * System Prompt: "Interventor Técnico Senior de Proyectos ISER"
+ * 2. LÓGICA DE AUDITORÍA — Envía inventario a la Cloud Function getNormativeAudit.
+ * La Cloud Function actúa como proxy seguro hacia Gemini AI en el servidor.
+ * La API Key de Gemini NUNCA se expone en el frontend.
  *
  * @param {Object} inventario — Resultado de escanearArchivosBloque()
  * @returns {Promise<Object>} — Resultado de auditoría con puntaje, faltantes, resumen
  */
 async function auditoriaDocumentalIA(inventario) {
-  if (!GEMINI_API_KEY) {
-    throw new Error('API Key de Gemini no configurada para auditoría normativa.');
-  }
+  Logger.info(`🔐 Enviando inventario a Cloud Function: ${AUDIT_FUNCTION_URL}`);
 
-  // ── Pre-analysis: check keywords locally first ──
-  const preAnalisis = {};
-  Object.entries(REQUISITOS_NORMATIVOS).forEach(([norma, config]) => {
-    const encontrados = inventario.archivos.filter(archivo => {
-      const nombreLower = archivo.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const carpetaLower = archivo.carpeta.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      return config.keywords.some(kw => nombreLower.includes(kw) || carpetaLower.includes(kw));
-    });
-    preAnalisis[norma] = {
-      encontrados: encontrados.map(a => a.nombre),
-      count: encontrados.length,
-      carpetas: [...new Set(encontrados.map(a => a.carpeta))]
-    };
+  const response = await fetch(AUDIT_FUNCTION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ inventario })
   });
 
-  // ── Build the prompt ──
-  const listaArchivos = inventario.archivos
-    .map(a => `  - [${a.carpeta}] ${a.nombre} (${a.extension.toUpperCase()}${a.size ? `, ${(a.size / 1024).toFixed(1)}KB` : ''})`)
-    .join('\n');
-
-  const listaCarpetas = inventario.subcarpetas.join(', ');
-
-  const prompt = `
-Actúa como un INTERVENTOR TÉCNICO SENIOR DE PROYECTOS ISER (Instituto Superior de Educación Rural) en Colombia.
-
-Tu tarea es realizar una AUDITORÍA DOCUMENTAL del bloque "${inventario.blockId}" ubicado en la sede "${inventario.sede}".
-
-INVENTARIO DE ARCHIVOS ENCONTRADOS (${inventario.totalArchivos} archivos en ${inventario.subcarpetas.length} carpetas):
-${listaArchivos}
-
-CARPETAS DETECTADAS: ${listaCarpetas}
-
-PRE-ANÁLISIS DE COINCIDENCIAS:
-${Object.entries(preAnalisis).map(([norma, data]) => 
-  `- ${norma}: ${data.count} archivo(s) potencialmente relacionados${data.count > 0 ? ': ' + data.encontrados.slice(0, 5).join(', ') : ''}`
-).join('\n')}
-
-INSTRUCCIONES DE AUDITORÍA:
-Compara este inventario contra los REQUISITOS MÍNIMOS de cada normativa colombiana:
-
-1. **NSR-10 (Norma Sismo Resistente):**
-   - Busca: Planos de cimentación, despiece de vigas/columnas, memorias de cálculo estructural, planos de refuerzo.
-   - Evalúa si los documentos estructurales son suficientes.
-
-2. **NTC 6047 (Accesibilidad para personas con movilidad reducida):**
-   - Busca: Planos de accesibilidad, diseño de rampas, matrices de cumplimiento, señalización inclusiva.
-   - Verifica si hay documentación de accesibilidad universal.
-
-3. **RETIE (Reglamento Técnico de Instalaciones Eléctricas):**
-   - Busca: Cuadros de cargas, diagramas unifilares, planos eléctricos, certificaciones.
-   - Evalúa completitud eléctrica.
-
-FORMATO DE RESPUESTA OBLIGATORIO (JSON puro, sin markdown):
-{
-  "resumen_ejecutivo": "Párrafo de 3-4 líneas con hallazgos principales.",
-  "normas": {
-    "NSR-10": {
-      "encontrados": ["lista de documentos encontrados relevantes"],
-      "faltantes_criticos": ["lista de documentos faltantes críticos"],
-      "puntaje": 0-100,
-      "observacion": "Observación breve"
-    },
-    "NTC-6047": {
-      "encontrados": ["..."],
-      "faltantes_criticos": ["..."],
-      "puntaje": 0-100,
-      "observacion": "..."
-    },
-    "RETIE": {
-      "encontrados": ["..."],
-      "faltantes_criticos": ["..."],
-      "puntaje": 0-100,
-      "observacion": "..."
-    }
-  },
-  "puntaje_global": 0-100,
-  "tareas_pendientes": [
-    {"prioridad": "CRITICA|ALTA|MEDIA", "descripcion": "Tarea específica a realizar"}
-  ]
-}
-
-IMPORTANTE: Responde SOLO con el JSON. Sin texto adicional, sin bloques de código markdown.
-`;
-
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-
-  // Try models with fallback
-  const models = ['gemini-2.5-flash', 'gemini-1.5-flash-latest'];
-  let lastError = null;
-
-  for (const modelName of models) {
-    try {
-      const model = genAI.getGenerativeModel(
-        { model: modelName },
-        { apiVersion: 'v1' }
-      );
-      const result = await model.generateContent(prompt);
-      const rawText = result.response.text().trim();
-
-      // Parse JSON response (handle possible markdown wrapping)
-      let jsonStr = rawText;
-      const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) jsonStr = jsonMatch[1].trim();
-
-      try {
-        const parsed = JSON.parse(jsonStr);
-        
-        // Determine traffic light level
-        const puntaje = parsed.puntaje_global || 0;
-        let nivel = 'rojo';
-        let colorHex = '#EF4444';
-        if (puntaje >= 85) { nivel = 'verde'; colorHex = '#10B981'; }
-        else if (puntaje >= 60) { nivel = 'amarillo'; colorHex = '#F59E0B'; }
-
-        return {
-          ...parsed,
-          nivel,
-          colorHex,
-          inventario_resumen: {
-            totalArchivos: inventario.totalArchivos,
-            totalCarpetas: inventario.subcarpetas.length,
-            blockId: inventario.blockId
-          },
-          timestamp: new Date().toISOString()
-        };
-      } catch (parseErr) {
-        Logger.warn('Fallo al parsear JSON de auditoría:', parseErr);
-        // Return a structured fallback with the raw text
-        return {
-          resumen_ejecutivo: rawText.substring(0, 500),
-          normas: {},
-          puntaje_global: 0,
-          nivel: 'rojo',
-          colorHex: '#EF4444',
-          tareas_pendientes: [{ prioridad: 'CRITICA', descripcion: 'Error en el análisis. Reintentar auditoría.' }],
-          inventario_resumen: {
-            totalArchivos: inventario.totalArchivos,
-            totalCarpetas: inventario.subcarpetas.length,
-            blockId: inventario.blockId
-          },
-          timestamp: new Date().toISOString(),
-          _parseError: true
-        };
-      }
-    } catch (modelErr) {
-      Logger.warn(`Modelo ${modelName} falló:`, modelErr.message);
-      lastError = modelErr;
-    }
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(`Cloud Function falló (${response.status}): ${errorData.error || response.statusText}`);
   }
 
-  throw lastError || new Error('Todos los modelos de IA fallaron.');
+  const result = await response.json();
+  return result;
 }
 
 /**

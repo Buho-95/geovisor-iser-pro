@@ -1,0 +1,49 @@
+name: Deploy to Firebase (Hosting + Functions)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy Geovisor ISER Pro
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout del código
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Configurar Node.js 20 (requerido por las Cloud Functions)
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: functions/package-lock.json
+
+      # 3. Instalar dependencias de las Cloud Functions
+      - name: Install Functions dependencies
+        run: npm ci
+        working-directory: functions
+
+      # 4. Desplegar Hosting y Functions a Firebase
+      #    FIREBASE_TOKEN: generado con `firebase login:ci` y guardado en GitHub Secrets
+      - name: Deploy to Firebase
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_GEOVISOR_ISER }}'
+          channelId: live
+          projectId: geovisor-iser
+        env:
+          FIREBASE_CLI_EXPERIMENTS: webframeworks
+
+      # Nota: Si prefieres usar FIREBASE_TOKEN en lugar de Service Account:
+      # Reemplaza el step anterior con:
+      #
+      # - name: Deploy to Firebase (token-based)
+      #   run: |
+      #     npm install -g firebase-tools
+      #     firebase deploy --only hosting,functions --token "${{ secrets.FIREBASE_TOKEN }}" --project geovisor-iser
