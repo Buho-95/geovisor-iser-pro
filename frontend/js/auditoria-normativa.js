@@ -80,7 +80,7 @@ let isAuditing = false;
 function generarArchivoHash(inventario) {
   return inventario.totalArchivos + ':' +
     inventario.archivos
-      .map(a => a.nombre)
+      .map(a => a.nombre + (a.updated ? '@' + a.updated : ''))
       .sort()
       .join('|');
 }
@@ -117,8 +117,8 @@ async function escanearArchivosBloque(blockId) {
     try {
       const result = await listAll(folderRef);
 
-      // Process files (items)
-      for (const itemRef of result.items) {
+      // Process files (items) concurrently via Promise.all
+      const filePromises = result.items.map(async (itemRef) => {
         const nombre = itemRef.name;
         const extension = nombre.includes('.') ? nombre.split('.').pop().toLowerCase() : 'sin_extension';
         
@@ -129,20 +129,24 @@ async function escanearArchivosBloque(blockId) {
             size: meta.size,
             contentType: meta.contentType,
             timeCreated: meta.timeCreated,
-            updated: meta.updated
+            updated: meta.updated // Used for global catch invalidation
           };
         } catch {
-          // Metadata might not be accessible
+          // Global catch para archivos individuales: fallbacks silenciosos
         }
 
-        inventario.archivos.push({
+        return {
           nombre,
           extension,
           carpeta: carpetaActual || 'raíz',
           rutaCompleta: itemRef.fullPath,
           ...metadata
-        });
-      }
+        };
+      });
+
+      // Wait for all metadata concurrently
+      const resolvedFiles = await Promise.all(filePromises);
+      inventario.archivos.push(...resolvedFiles);
 
       // Process subfolders (prefixes)
       for (const prefixRef of result.prefixes) {

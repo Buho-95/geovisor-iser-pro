@@ -12,6 +12,9 @@ const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
+// ── Variables Globales para Caché (Singleton / Warm Starts) ──
+let genAIInstance = null;
+
 // ── Secret: API Key de Gemini (almacenada en Firebase Secret Manager) ──
 // Para configurar: firebase functions:secrets:set GEMINI_API_KEY
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
@@ -173,8 +176,11 @@ FORMATO DE RESPUESTA OBLIGATORIO (JSON puro, sin markdown):
 IMPORTANTE: Responde SOLO con el JSON. Sin texto adicional, sin bloques de código markdown.
 `;
 
-    // ── Llamada a Gemini AI ──
-    const genAI = new GoogleGenerativeAI(apiKey);
+    // ── Llamada a Gemini AI (Patrón Singleton) ──
+    if (!genAIInstance) {
+      genAIInstance = new GoogleGenerativeAI(apiKey);
+    }
+    const genAI = genAIInstance;
     const models = ['gemini-2.5-flash', 'gemini-1.5-flash-latest'];
     let lastError = null;
 
@@ -241,7 +247,21 @@ IMPORTANTE: Responde SOLO con el JSON. Sin texto adicional, sin bloques de códi
       }
     }
 
-    // Si todos los modelos fallaron
-    res.status(500).json({ error: 'Todos los modelos de IA fallaron.', details: lastError?.message });
+    // Si todos los modelos fallaron (Fallback de Resiliencia)
+    console.error('Todos los modelos de IA fallaron:', lastError?.message);
+    res.status(200).json({
+      resumen_ejecutivo: "⚠️ **Módulo en Mantenimiento IA:** El motor de auditoría inteligente no está disponible temporalmente (Alta demanda o límite de cuota). El resto del Dashboard funciona correctamente.",
+      normas: {},
+      puntaje_global: 0,
+      nivel: 'mantenimiento',
+      colorHex: '#64748B', // Gris para indicar inactividad
+      tareas_pendientes: [{ prioridad: 'MEDIA', descripcion: 'Sistema de IA temporalmente inactivo. Validar documentación manualmente u oprima "Refrescar" más tarde.' }],
+      inventario_resumen: {
+        totalArchivos: inventario.totalArchivos,
+        totalCarpetas: (inventario.subcarpetas || []).length,
+        blockId: inventario.blockId
+      },
+      timestamp: new Date().toISOString()
+    });
   }
 );
