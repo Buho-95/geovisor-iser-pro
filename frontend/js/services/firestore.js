@@ -1,7 +1,7 @@
 /**
  * Servicio Firestore: sincronización en tiempo real y helpers para futuras colecciones.
  */
-import { collection, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { collection, onSnapshot, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { db } from './firebase.js';
 import { state, setArchivos, setEstadosBloques } from '../core/state.js';
 import { dbPath, COLLECTIONS } from '../core/config.js';
@@ -95,3 +95,54 @@ export async function guardarEstadoBloque(blockId, datos) {
     throw e;
   }
 }
+
+/**
+ * Recupera el informe de auditoría cacheado para un bloque.
+ * @param {string} blockId
+ * @returns {Promise<Object|null>} — Objeto con resultado de auditoría o null si no existe
+ */
+export async function getAuditoriaCached(blockId) {
+  try {
+    const docRef = doc(db, COLLECTIONS.AUDITORIAS_BLOQUES, blockId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data();
+    }
+    return null;
+  } catch (e) {
+    console.error('Error leyendo auditoría cacheada:', e);
+    return null;
+  }
+}
+
+/**
+ * Guarda el resultado completo de una auditoría en Firestore (caché persistente).
+ * Incluye un hash/fingerprint del inventario para detectar cambios.
+ * @param {string} blockId
+ * @param {Object} auditResult — Resultado completo de la auditoría IA
+ * @param {Object} inventario — Inventario de archivos escaneado
+ */
+export async function guardarAuditoria(blockId, auditResult, inventario) {
+  try {
+    // Crear un fingerprint basado en los archivos: totalArchivos + nombres concatenados
+    const archivoHash = inventario.totalArchivos + ':' +
+      inventario.archivos
+        .map(a => a.nombre)
+        .sort()
+        .join('|');
+
+    const docRef = doc(db, COLLECTIONS.AUDITORIAS_BLOQUES, blockId);
+    await setDoc(docRef, {
+      ...auditResult,
+      archivoHash,
+      totalArchivosAlAuditar: inventario.totalArchivos,
+      fechaAuditoria: new Date().toISOString(),
+      blockId
+    });
+    return true;
+  } catch (e) {
+    console.error('Error guardando auditoría en caché:', e);
+    throw e;
+  }
+}
+

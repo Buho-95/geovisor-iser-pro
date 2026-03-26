@@ -32,8 +32,10 @@ const AI_CONTEXT_PATHS = [
 ];
 
 // ─── GEMINI API KEY ───
-// TODO: Pegar la API Key de Google AI Studio aquí.
-const GEMINI_API_KEY = "AIzaSyBtW6xf9FLNN7j8wwy9jpg0PUuOaz6Vz-8";
+// REGLA DE ORO: Cero secretos en el frontend.
+// La API Key se gestiona en Firebase Secret Manager y se accede vía Cloud Function.
+// Esta constante se mantiene como flag para habilitar/deshabilitar el botón de IA local.
+const GEMINI_API_KEY = null; // Deshabilitado: usar Cloud Function /api/getNormativeAudit
 
 /**
  * Get file context for AI analysis from specific folders.
@@ -358,7 +360,7 @@ function generatePDF() {
   try {
       const canvas3D = document.querySelector('#viewer-container canvas') || document.querySelector('canvas');
       if (canvas3D) {
-          imgData3D = canvas3D.toDataURL('image/jpeg', 0.9);
+          imgData3D = canvas3D.toDataURL('image/jpeg', 0.65);
       }
   } catch (e) {
       Logger.warn("No se pudo extraer el Canvas 3D. Usando fallback.", e);
@@ -381,8 +383,14 @@ function generatePDF() {
   const maxWidth = 170;
   const maxPageY = 270;
   
-  // ── Header & Logo ──
-  if (LOGO_ISER_BASE64) doc.addImage(LOGO_ISER_BASE64, 'PNG', 20, 15, 30, 12);
+  // ── Header & Logo (carga optimizada sin bloquear renderizado) ──
+  try {
+    if (LOGO_ISER_BASE64) {
+      doc.addImage(LOGO_ISER_BASE64, 'PNG', 20, 15, 30, 12, undefined, 'FAST');
+    }
+  } catch (logoErr) {
+    Logger.warn('Logo ISER no se pudo inyectar en el PDF:', logoErr);
+  }
 
   doc.setTextColor(46, 125, 50); // ISER Green
   doc.setFontSize(14);
@@ -426,7 +434,7 @@ function generatePDF() {
     const snapWidth = 100;
     const snapHeight = 60;
     const snapX = (210 - snapWidth) / 2;
-    doc.addImage(imgData3D, 'JPEG', snapX, currentY, snapWidth, snapHeight);
+    doc.addImage(imgData3D, 'JPEG', snapX, currentY, snapWidth, snapHeight, undefined, 'FAST');
     doc.setDrawColor(200, 200, 200);
     doc.setLineWidth(0.5);
     doc.rect(snapX, currentY, snapWidth, snapHeight);

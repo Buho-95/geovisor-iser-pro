@@ -1,0 +1,32 @@
+/* Audit Cache Badge — Visitor Mode Persistence */
+.audit-cache-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--cyan);
+  background: rgba(0, 229, 255, 0.06);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.audit-cache-badge i {
+  font-size: 1rem;
+  opacity: 0.8;
+}
+
+/* Override audit-controls for 3-column grid (select + start + refresh buttons) */
+.audit-controls {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+/* Visitor mode: hide admin-only elements */
+body.visitor-mode .admin-only {
+  display: none !important;
+}
