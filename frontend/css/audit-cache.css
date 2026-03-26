@@ -73,3 +73,10 @@ body.visitor-mode .admin-only {
   color: #FFFFFF !important;
 }
 
+/* 4. Planoteca Estructurada: Forzar contraste blanco en categorías */
+.planoteca-menu .carpeta-header h4.text-slate-800,
+.planoteca-menu .carpeta-header p.text-slate-500,
+.planoteca-menu .carpeta-header i.ph-caret-down {
+  color: #FFFFFF !important;
+}
+
