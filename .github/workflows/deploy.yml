@@ -14,17 +14,19 @@ jobs:
   deploy:
     name: Deploy Geovisor ISER Pro
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       # 1. Checkout del código
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Configurar Node.js 20 (requerido por las Cloud Functions)
-      - name: Set up Node.js 20
+      # 2. Configurar Node.js 24 (requerido por las Cloud Functions)
+      - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       # 3. Instalar dependencias de las Cloud Functions
       - name: Install Functions dependencies
