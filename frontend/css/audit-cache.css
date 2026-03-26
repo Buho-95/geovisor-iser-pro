@@ -30,3 +30,46 @@
 body.visitor-mode .admin-only {
   display: none !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   Correcciones de Contraste ISER (Legibilidad 100%)
+   ═══════════════════════════════════════════════════════ */
+
+/* 1. Contraste sobre Verde: Textos blancos en panel de auditoría y dashboard general */
+#panel-dashboard,
+#panel-dashboard h1,
+#panel-dashboard h2,
+#panel-dashboard h3,
+#panel-dashboard h4,
+#panel-dashboard p,
+#panel-dashboard span,
+#panel-dashboard div {
+  color: #FFFFFF;
+}
+
+/* 2. Lógica de Fondo Claro: Mantener texto negro en elementos claros */
+#panel-dashboard .bg-white,
+#panel-dashboard .bg-white *,
+#panel-dashboard [style*="background-color: white"],
+#panel-dashboard [style*="background-color: white"] *,
+#panel-dashboard [style*="background: white"],
+#panel-dashboard [style*="background: white"] *,
+#panel-dashboard [style*="background-color: #f"],
+#panel-dashboard [style*="background-color: #f"] *,
+#panel-dashboard [style*="background-color: #F"],
+#panel-dashboard [style*="background-color: #F"] *,
+#panel-dashboard table,
+#panel-dashboard table * {
+  color: #000000 !important;
+}
+
+/* 3. Badges y Alertas: Forzar color blanco puro */
+.audit-cache-badge,
+.audit-cache-badge i,
+.visitor-notice,
+.visitor-notice *,
+#aviso-visitante,
+#aviso-visitante * {
+  color: #FFFFFF !important;
+}
+
