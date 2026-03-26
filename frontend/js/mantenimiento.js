@@ -7,10 +7,12 @@ import { state, setCurrentBlock } from './core/state.js';
 import { getCampusData } from './campus-data.js';
 import { storage } from './services/firebase.js';
 import { getFilesInPath } from './services/fileMapper.js';
-import { guardarEstadoBloque } from './services/firestore.js';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { guardarEstadoBloque, uploadReportToStorage, saveReportMetadata } from './services/firestore.js';
 import { on, EVENTS } from './core/events.js';
 import { Logger } from './core/logger.js';
+import { openAuditPreviewModal } from './modules/audit-modal.js';
+import { refreshHistory } from './modules/report-history.js';
+import { isAdmin } from './services/auth.js';
 
 // ─── DOM References ───
 let formEl, bloqueSelect, estadoSelect, fechaInput;
@@ -31,11 +33,7 @@ const AI_CONTEXT_PATHS = [
   { path: '08_Registro_Fotografico', label: 'Fotografías' }
 ];
 
-// ─── GEMINI API KEY ───
-// REGLA DE ORO: Cero secretos en el frontend.
-// La API Key se gestiona en Firebase Secret Manager y se accede vía Cloud Function.
-// Esta constante se mantiene como flag para habilitar/deshabilitar el botón de IA local.
-const GEMINI_API_KEY = null; // Deshabilitado: usar Cloud Function /api/getNormativeAudit
+
 
 /**
  * Get file context for AI analysis from specific folders.
@@ -539,7 +537,7 @@ function initMantenimiento() {
   Logger.info('Módulo de Mantenimiento inicializado.');
 }
 
-// Global event listener for PDF generation (Event Delegation as requested)
+// Global event listener for PDF generation — Opens Preview Modal first
 document.addEventListener('click', (e) => {
   if (e.target.closest('#btn-generate-pdf')) {
     const blockId = state.currentBlockId;
@@ -548,11 +546,300 @@ document.addEventListener('click', (e) => {
       alert("Por favor, selecciona un bloque en el mapa antes de generar el reporte.");
       return;
     }
+
+    if (!isAdmin()) {
+      alert("Solo el administrador puede generar reportes.");
+      return;
+    }
     
-    console.log("Iniciando exportación para:", blockId);
-    generatePDF();
+    // Open preview modal; on confirm, generate PDF with chart images
+    openAuditPreviewModal(async (chartImages) => {
+      Logger.info("Generando PDF con gráficos capturados:", Object.keys(chartImages));
+      generatePDFWithCharts(chartImages);
+    });
   }
 });
+
+/**
+ * Generates the PDF with embedded chart images and auto-uploads to Firebase.
+ * @param {Object} chartImages — { radarChart: dataUrl, model3D: dataUrl }
+ */
+async function generatePDFWithCharts(chartImages = {}) {
+  const fecha = new Date().toLocaleDateString('es-CO');
+  
+  try {
+    if (typeof window.jspdf === 'undefined' && typeof window.jsPDF === 'undefined') {
+      console.error('Librería jsPDF no cargada');
+      alert('Error crítico: La librería jsPDF no ha sido cargada correctamente.');
+      return;
+    }
+
+    // Use chart images from modal capture, fallback to live capture
+    let imgData3D = chartImages.model3D || null;
+    if (!imgData3D) {
+      try {
+        const canvas3D = document.querySelector('#viewer-container canvas') || document.querySelector('canvas');
+        if (canvas3D) imgData3D = canvas3D.toDataURL('image/jpeg', 0.65);
+      } catch (e) {
+        Logger.warn("No se pudo extraer el Canvas 3D.", e);
+      }
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    
+    const blockId = state.currentBlockId || 'bloque-desconocido';
+    const campusData = getCampusData() || {};
+    const blockName = campusData?.[blockId]?.name || blockId || 'Nombre no disponible';
+    const blockInfo = campusData?.[blockId]?.info || {};
+    const context = getContextForAI(blockId) || { files: [] };
+    const estadoData = state.estadosBloques?.[blockId] || {};
+    
+    const marginX = 20;
+    const maxWidth = 170;
+    const maxPageY = 270;
+    
+    // ── Header & Logo ──
+    try {
+      if (LOGO_ISER_BASE64) {
+        doc.addImage(LOGO_ISER_BASE64, 'PNG', 20, 15, 30, 12, undefined, 'FAST');
+      }
+    } catch (logoErr) {
+      Logger.warn('Logo ISER no se pudo inyectar en el PDF:', logoErr);
+    }
+
+    doc.setTextColor(46, 125, 50);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Instituto Superior de Educación Rural - ISER', marginX + 35, 20);
+
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Reporte de Auditoría de Integridad Técnica', marginX + 35, 26);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Fecha de generación: ' + fecha, marginX + 35, 31);
+
+    let currentY = 45;
+
+    // ── Resumen Inicial Sombreado ──
+    doc.setFillColor(245, 245, 245);
+    doc.rect(marginX, currentY, maxWidth, 25, 'F');
+    
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`RESUMEN TÉCNICO - ${blockName.toUpperCase()}`, marginX + 5, currentY + 7);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const scoreBadge = estadoData.score_infraestructura ? `${estadoData.score_infraestructura}%` : 'N/A';
+    doc.text(`Área: ${blockInfo.area || '--'} m²`, marginX + 5, currentY + 14);
+    doc.text(`Sistema Constructivo: ${blockInfo.construction || '--'}`, marginX + 70, currentY + 14);
+    doc.text(`Recintos: ${blockInfo.rooms || '--'}`, marginX + 5, currentY + 20);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(46, 125, 50);
+    doc.text(`Score Global Normativo: ${scoreBadge}`, marginX + 70, currentY + 20);
+
+    currentY += 35;
+
+    // ── Fotografía del modelo 3D ──
+    if (imgData3D) {
+      const snapWidth = 100;
+      const snapHeight = 60;
+      const snapX = (210 - snapWidth) / 2;
+      doc.addImage(imgData3D, 'JPEG', snapX, currentY, snapWidth, snapHeight, undefined, 'FAST');
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.rect(snapX, currentY, snapWidth, snapHeight);
+      currentY += snapHeight + 10;
+    }
+
+    // ── Radar Chart (from modal capture) ──
+    if (chartImages.radarChart) {
+      if (currentY + 80 > maxPageY) { doc.addPage(); currentY = 20; }
+      const chartWidth = 90;
+      const chartHeight = 70;
+      const chartX = (210 - chartWidth) / 2;
+      doc.addImage(chartImages.radarChart, 'JPEG', chartX, currentY, chartWidth, chartHeight, undefined, 'FAST');
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.3);
+      doc.rect(chartX, currentY, chartWidth, chartHeight);
+      currentY += chartHeight + 10;
+    }
+
+    // ── Diagnóstico ──
+    if (currentY > maxPageY) { doc.addPage(); currentY = 20; }
+
+    doc.setTextColor(46, 125, 50);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Desarrollo del Análisis Normativo', marginX, currentY);
+    currentY += 8;
+
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const diagText = estadoData.diagnostico_texto || 'Sin diagnóstico generado. Ejecute la auditoría de IA.';
+    const diagLines = diagText.split('\n');
+    const splitDiag = doc.splitTextToSize(diagLines, maxWidth);
+    doc.text(splitDiag, marginX, currentY);
+    currentY += (splitDiag.length * 5) + 8;
+
+    // ── Detalle Normativo ──
+    if (estadoData.normas && typeof doc.autoTable === 'function') {
+      Object.entries(estadoData.normas).forEach(([norma, data]) => {
+        if (currentY + 25 > maxPageY) { doc.addPage(); currentY = 20; }
+        
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 30, 30);
+        
+        const normaLimpia = norma.replace(/[%!&🛡️⚠️]/g, '').trim();
+        doc.text('NORMA: ' + normaLimpia + ' (PUNTAJE: ' + (data.puntaje || 0) + ')', marginX, currentY);
+        
+        let detectadosStr = (data.encontrados || []).length ? data.encontrados.join('\n') : 'Ninguno';
+        let faltantesStr = (data.faltantes_criticos || []).length ? data.faltantes_criticos.join('\n') : 'Ninguno';
+        
+        detectadosStr = detectadosStr.replace(/[%!&🛡️⚠️]/g, '');
+        faltantesStr = faltantesStr.replace(/[%!&🛡️⚠️]/g, '');
+
+        doc.autoTable({
+          startY: currentY + 4,
+          head: [['ESTADO OK', 'FALTANTES CRITICOS']],
+          body: [[detectadosStr, faltantesStr]],
+          theme: 'plain',
+          styles: { fontSize: 10, cellPadding: 3, font: 'helvetica' },
+          headStyles: { fontStyle: 'bold', textColor: [30, 30, 30] },
+          columnStyles: {
+            0: { textColor: [21, 128, 61], cellWidth: maxWidth / 2 },
+            1: { textColor: [220, 38, 38], cellWidth: maxWidth / 2 }
+          },
+          margin: { left: marginX, right: marginX }
+        });
+        currentY = doc.lastAutoTable.finalY + 10;
+      });
+    } else if (!estadoData.normas) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('No hay datos normativos detallados disponibles.', marginX, currentY);
+      currentY += 10;
+    }
+
+    // ── Plan de Acción ──
+    if (estadoData.tareas_pendientes && estadoData.tareas_pendientes.length > 0 && typeof doc.autoTable === 'function') {
+      if (currentY + 30 > maxPageY) { doc.addPage(); currentY = 20; }
+      
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(46, 125, 50);
+      doc.text('Plan de Acción Priorizado', marginX, currentY);
+      
+      const bodyTareas = estadoData.tareas_pendientes.map(t => [t.prioridad, t.descripcion]);
+      doc.autoTable({
+        startY: currentY + 6,
+        head: [['Prioridad', 'Descripción de la Tarea']],
+        body: bodyTareas,
+        styles: { fontSize: 10, cellPadding: 4, font: 'helvetica' },
+        headStyles: { fillColor: [46, 125, 50], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [240, 248, 240] },
+        margin: { left: marginX, right: marginX }
+      });
+      currentY = doc.lastAutoTable.finalY + 15;
+    }
+
+    // ── File Table ──
+    if (context.files.length > 0) {
+      let tableY = currentY + 10;
+      if (tableY + 30 > maxPageY) { doc.addPage(); tableY = 20; }
+
+      const folderGroups = {};
+      context.files.forEach(f => {
+        if (!folderGroups[f.carpeta]) folderGroups[f.carpeta] = [];
+        folderGroups[f.carpeta].push(f);
+      });
+
+      const tableData = [];
+      Object.entries(folderGroups).forEach(([folder, files]) => {
+        const count = files.length;
+        if (count < 5) {
+          tableData.push([{ content: folder, rowSpan: count }, files[0].nombre, 'Disponible']);
+          for (let i = 1; i < count; i++) {
+            tableData.push([files[i].nombre, 'Disponible']);
+          }
+        } else {
+          tableData.push([folder, `${count} archivo(s) en total`, 'Completo']);
+        }
+      });
+
+      doc.autoTable({
+        startY: tableY,
+        head: [['Categoría / Carpeta', 'Documentación Detectada', 'Estado']],
+        body: tableData,
+        styles: { fontSize: 10, cellPadding: 4, font: 'helvetica' },
+        headStyles: { fillColor: [46, 125, 50], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [240, 248, 240] },
+        margin: { left: marginX, right: marginX }
+      });
+    }
+
+    // ── Sign Off ──
+    if (typeof doc.lastAutoTable !== 'undefined' && doc.lastAutoTable !== null && doc.lastAutoTable.finalY) {
+      currentY = doc.lastAutoTable.finalY + 15;
+    }
+
+    if (currentY > 260) { doc.addPage(); currentY = 20; } else { currentY += 15; }
+    
+    const sigWidth = 70;
+    const sigX = 210 - marginX - sigWidth;
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.setLineDash([2, 2], 0);
+    doc.line(sigX, currentY, sigX + sigWidth, currentY);
+    doc.setLineDash([]);
+    
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 30, 30);
+    doc.text('Arq. Pedro Johan Trillos Pérez', 210 - marginX, currentY + 6, { align: 'right' });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Docente ISER', 210 - marginX, currentY + 11, { align: 'right' });
+
+    // ── Footer ──
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`ISER-Geovisor CDE Institucional | Página ${i} de ${pageCount}`, 105, 287, { align: 'center' });
+    }
+
+    // Save locally
+    const fileName = `Reporte_Auditoria_Tecnica_${blockId}_${Date.now()}.pdf`;
+    doc.save(fileName);
+
+    // ── Auto-upload to Firebase Storage (Admin only) ──
+    if (isAdmin()) {
+      try {
+        const pdfBlob = doc.output('blob');
+        const { url, storagePath } = await uploadReportToStorage(blockId, pdfBlob, fileName);
+        const userEmail = state.user?.email || 'admin';
+        await saveReportMetadata(blockId, blockName, url, storagePath, userEmail);
+        Logger.info(`📄 Reporte subido a Firebase Storage y registrado en historial.`);
+        refreshHistory();
+      } catch (uploadErr) {
+        Logger.warn('No se pudo subir el reporte a Firebase:', uploadErr);
+      }
+    }
+
+  } catch (error) {
+    console.error("Error al exportar PDF:", error);
+    alert("Hubo un error al generar el PDF. Verifica la consola para más detalles.");
+  }
+}
 
 // Global exposure as requested by user to avoid Export Syntax Errors
 window.initMantenimiento = initMantenimiento;

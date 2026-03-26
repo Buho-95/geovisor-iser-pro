@@ -50,4 +50,4 @@ jobs:
       # 6. Desplegar Hosting y Functions a Firebase
       #    La autenticación se obtiene automáticamente del paso OIDC anterior
       - name: Deploy Hosting + Functions to Firebase
-        run: firebase deploy --only hosting,functions --project geovisor-iser
+        run: firebase deploy --only hosting,functions,firestore,storage --project geovisor-iser

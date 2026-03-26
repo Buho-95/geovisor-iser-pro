@@ -1,11 +1,20 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // ── Lectura general: cualquier usuario autenticado ──
     match /{allPaths=**} {
-      // Lectura: cualquier usuario autenticado (admin o visitor anónimo)
       allow read: if request.auth != null;
-      // Escritura: solo usuarios con email (no anónimos)
-      allow write: if request.auth != null && request.auth.token.email != null;
+    }
+
+    // ── Escritura general (documentos_iser): solo admin con email ──
+    match /documentos_iser/{allPaths=**} {
+      allow write: if request.auth != null && request.auth.token.email == 'pedrojtrillos.arq@gmail.com';
+    }
+
+    // ── Auditorías (PDFs reportes): solo admin con email ──
+    match /auditorias/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write, delete: if request.auth != null && request.auth.token.email == 'pedrojtrillos.arq@gmail.com';
     }
   }
 }

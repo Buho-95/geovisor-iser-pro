@@ -1,18 +1,39 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Solo usuarios autenticados pueden leer
-    // Solo admins autenticados (no anonimos) pueden escribir
+
+    // ── Lectura pública para datos generales ──
     match /{document=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.token.email != null;
+      allow read: if true;
     }
 
-    // Colección auditorias_bloques: lectura para cualquier autenticado,
-    // escritura desde Cloud Functions (admin SDK) o admins con email
+    // ── Escritura general: solo admin autenticado con email ──
+    match /archivos_iser/{document=**} {
+      allow write: if request.auth != null && request.auth.token.email == 'pedrojtrillos.arq@gmail.com';
+    }
+
+    // ── Estados de bloques: lectura pública, escritura solo admin o Cloud Functions ──
+    match /bloques_estado/{blockId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.email == 'pedrojtrillos.arq@gmail.com';
+    }
+
+    // ── Auditorías cacheadas: lectura pública, escritura solo admin ──
     match /auditorias_bloques/{blockId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.email == 'pedrojtrillos.arq@gmail.com';
+    }
+
+    // ── Historial de reportes: lectura pública, escritura/borrado solo admin ──
+    match /reportes_historial/{reportId} {
+      allow read: if true;
+      allow write, delete: if request.auth != null && request.auth.token.email == 'pedrojtrillos.arq@gmail.com';
+    }
+
+    // ── Usuarios: lectura autenticada, escritura solo admin ──
+    match /usuarios_iser/{userId} {
       allow read: if request.auth != null;
-      allow write: if false;
+      allow write: if request.auth != null && request.auth.token.email == 'pedrojtrillos.arq@gmail.com';
     }
   }
 }

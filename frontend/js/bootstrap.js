@@ -256,6 +256,16 @@ export async function bootstrap() {
     Logger.error('❌ Error cargando Módulo de Auditoría Normativa:', e);
   }
 
+  // Lazy load: Report History module
+  if (document.getElementById('report-history-container')) {
+    try {
+      const { initReportHistory } = await import('./modules/report-history.js');
+      initReportHistory();
+    } catch (e) {
+      Logger.error('❌ Error cargando Módulo de Historial de Reportes:', e);
+    }
+  }
+
   // ═══════════════════════════════════════════════════════
 
   // ⌨️ GLOBAL ESC KEY — Closes whichever modal is open (priority order)
@@ -282,6 +292,13 @@ export async function bootstrap() {
     const blockEditModal = document.getElementById('block-edit-modal');
     if (blockEditModal?.classList.contains('activo')) {
       closeBlockEditModal();
+      return;
+    }
+
+    // 4. Audit preview modal
+    const auditPreview = document.getElementById('audit-preview-modal');
+    if (auditPreview && auditPreview.style.display !== 'none') {
+      document.getElementById('audit-modal-close')?.click();
       return;
     }
   });
