@@ -5,13 +5,16 @@ import { auth } from './firebase.js';
 import { Logger } from '../core/logger.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
 
-const FUNCTIONS_BASE_URL = 'https://us-central1-geovisor-iser.cloudfunctions.net';
+const RUN_APP_URLS = {
+  getBlockInventory: 'https://getblockinventory-arhxbhdbiq-uc.a.run.app',
+  getNormativeAudit: 'https://getnormativeaudit-arhxbhdbiq-uc.a.run.app',
+};
 
 function resolveApiUrl(url) {
   if (typeof url !== 'string') return url;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  if (url === '/api/getBlockInventory') return `${FUNCTIONS_BASE_URL}/getBlockInventory`;
-  if (url === '/api/getNormativeAudit') return `${FUNCTIONS_BASE_URL}/getNormativeAudit`;
+  if (url === '/api/getBlockInventory') return RUN_APP_URLS.getBlockInventory;
+  if (url === '/api/getNormativeAudit') return RUN_APP_URLS.getNormativeAudit;
   return url;
 }
 

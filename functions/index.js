@@ -15,7 +15,6 @@ if (!admin.apps.length) {
 const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const cors = require('cors')({ origin: true });
 
 const { getNormativeConfig } = require('./configService');
 const { buildInventoryForBlock } = require('./storageInventory');
@@ -33,40 +32,6 @@ const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 let genAIInstance = null;
 
 const COL_INV = 'inventario_bloques';
-
-function applyCorsHeaders(res) {
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-}
-
-function withCors(handler) {
-  return async (req, res) => {
-    // CORS SIEMPRE primero: aplica también para respuestas de error/early return.
-    applyCorsHeaders(res);
-
-    if (req.method === 'OPTIONS') {
-      return res.status(204).send('');
-    }
-
-    try {
-      return await new Promise((resolve, reject) => {
-        cors(req, res, async () => {
-          try {
-            const out = await handler(req, res);
-            resolve(out);
-          } catch (err) {
-            reject(err);
-          }
-        });
-      });
-    } catch (error) {
-      console.error('Handler error:', error);
-      if (res.headersSent) return;
-      return res.status(500).json({ error: 'Internal error' });
-    }
-  };
-}
 
 function preAnalisisFromInventario(inventario) {
   const normative = getNormativeConfig();
@@ -343,18 +308,18 @@ IMPORTANTE: Responde SOLO con el JSON válido RFC 8259. Sin texto adicional, sin
 }
 
 const fnOpts = {
-  cors: false,
+  cors: true,
   region: 'us-central1',
   memory: '512MiB',
   timeoutSeconds: 120,
 };
 
-exports.getBlockInventory = onRequest(fnOpts, withCors(handleGetBlockInventory));
+exports.getBlockInventory = onRequest(fnOpts, handleGetBlockInventory);
 
 exports.getNormativeAudit = onRequest(
   {
     ...fnOpts,
     secrets: [GEMINI_API_KEY],
   },
-  withCors(handleGetNormativeAudit)
+  handleGetNormativeAudit
 );

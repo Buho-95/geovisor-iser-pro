@@ -36,8 +36,8 @@ const AUDIT_THRESHOLDS = {
   mapaAmarillo: 50,
 };
 
-const AUDIT_FUNCTION_URL = 'https://us-central1-geovisor-iser.cloudfunctions.net/getNormativeAudit';
-const INVENTORY_FUNCTION_URL = 'https://us-central1-geovisor-iser.cloudfunctions.net/getBlockInventory';
+const AUDIT_FUNCTION_URL = 'https://getnormativeaudit-arhxbhdbiq-uc.a.run.app';
+const INVENTORY_FUNCTION_URL = 'https://getblockinventory-arhxbhdbiq-uc.a.run.app';
 
 const REQUISITOS_NORMATIVOS = {
   'NSR-10': {
