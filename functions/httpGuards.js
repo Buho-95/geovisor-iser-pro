@@ -5,6 +5,7 @@ const admin = require('firebase-admin');
 const RATE_WINDOW_MS = 60 * 1000;
 const RATE_MAX = 30;
 const rateBuckets = new Map();
+const TEMP_ADMIN_EMAILS = ['pedrojtrillos.arq@gmail.com'];
 
 function getClientKey(req) {
   const xf = req.headers['x-forwarded-for'];
@@ -59,6 +60,10 @@ async function verifyBearerAndAdmin(req) {
   }
   if (decoded.firebase?.sign_in_provider === 'anonymous') {
     return { error: 'Los visitantes anónimos no pueden ejecutar esta acción', status: 403 };
+  }
+  const email = String(decoded.email || '').toLowerCase();
+  if (TEMP_ADMIN_EMAILS.includes(email)) {
+    return { uid: decoded.uid, email: decoded.email || null, isAdmin: true, fallback: 'email' };
   }
   const snap = await admin.firestore().doc(`usuarios_iser/${decoded.uid}`).get();
   if (!snap.exists || snap.data().role !== 'admin') {

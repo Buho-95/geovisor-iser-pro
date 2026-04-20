@@ -10,6 +10,7 @@ const STORAGE_BASE = 'documentos_iser';
  */
 async function scanPrefix(prefix, blockId, blockName, sede, basePathLabel) {
   const bucket = admin.storage().bucket();
+  const bucketName = bucket.name;
   const archivos = [];
   const subcarpetas = new Set();
 
@@ -30,6 +31,12 @@ async function scanPrefix(prefix, blockId, blockName, sede, basePathLabel) {
     }
 
     const meta = f.metadata || {};
+    const tokenRaw = (meta.metadata && meta.metadata.firebaseStorageDownloadTokens) || '';
+    const token = tokenRaw.split(',')[0] || '';
+    const encodedPath = encodeURIComponent(full);
+    const downloadUrl = token
+      ? `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${token}`
+      : '';
     const metaExtra = {
       size: Number(meta.size) || 0,
       contentType: meta.contentType || '',
@@ -39,10 +46,15 @@ async function scanPrefix(prefix, blockId, blockName, sede, basePathLabel) {
 
     const extension = nombre.includes('.') ? nombre.split('.').pop().toLowerCase() : 'sin_extension';
     archivos.push({
+      id: full,
+      bloque: blockId,
       nombre,
       extension,
+      tipo: extension,
       carpeta,
       rutaCompleta: full,
+      storagePath: full,
+      url: downloadUrl,
       ...metaExtra,
     });
   }
