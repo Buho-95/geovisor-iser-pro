@@ -55,6 +55,10 @@ function doInitGlobalView() {
 }
 
 export async function bootstrap() {
+  let unsubArchivos = null;
+  let unsubEstados = null;
+  let dataStreamsStarted = false;
+
   initLayerManager();
   setGetCurrentBlockId(() => state.currentBlockId);
 
@@ -81,13 +85,21 @@ export async function bootstrap() {
       }, 500);
     },
     onAuthChange(u) {
-      initArchivosSubscription(() => {
+      if (!u) {
+        if (unsubArchivos) { unsubArchivos(); unsubArchivos = null; }
+        if (unsubEstados) { unsubEstados(); unsubEstados = null; }
+        dataStreamsStarted = false;
+        return;
+      }
+      if (dataStreamsStarted) return;
+      dataStreamsStarted = true;
+
+      unsubArchivos = initArchivosSubscription(() => {
         if (state.currentBlockId) {
           showBlockView(state.currentBlockId, (blockId) => state.archivosNube?.filter(a => a.bloque === blockId) || []);
         }
       });
-      // Start block states sync
-      startEstadosBloquesSync();
+      unsubEstados = startEstadosBloquesSync();
     }
   });
 

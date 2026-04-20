@@ -3,9 +3,11 @@ service firebase.storage {
   match /b/{bucket}/o {
 
     function isAdmin() {
-      return request.auth != null
-        && firestore.exists(/databases/(default)/documents/usuarios_iser/$(request.auth.uid))
-        && firestore.get(/databases/(default)/documents/usuarios_iser/$(request.auth.uid)).data.role == 'admin';
+      return request.auth != null && (
+        (firestore.exists(/databases/(default)/documents/usuarios_iser/$(request.auth.uid))
+          && firestore.get(/databases/(default)/documents/usuarios_iser/$(request.auth.uid)).data.role == 'admin')
+        || request.auth.token.email == 'pedrojtrillos.arq@gmail.com'
+      );
     }
 
     match /documentos_iser/{allPaths=**} {

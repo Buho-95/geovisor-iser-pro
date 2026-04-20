@@ -9,6 +9,8 @@ import { state, setUser } from '../core/state.js';
 import { Logger } from '../core/logger.js';
 import { COLLECTIONS } from '../core/config.js';
 
+const TEMP_ADMIN_EMAILS = ['pedrojtrillos.arq@gmail.com'];
+
 function enforceAuthGuard() {
   const appContainer = document.getElementById('app-container');
   const authScreen = document.getElementById('auth-screen');
@@ -172,6 +174,9 @@ export function initAuth(callbacks = {}) {
 
   onAuthStateChanged(auth, async (u) => {
     Logger.debug('Estado de Auth:', u);
+    if (u) {
+      console.log('AUTH READY:', u.uid);
+    }
     state.user = u;
 
     const loadingScreen = document.getElementById('loading-screen');
@@ -181,11 +186,17 @@ export function initAuth(callbacks = {}) {
         const profileRef = doc(db, COLLECTIONS.USUARIOS, u.uid);
         const snap = await getDoc(profileRef);
         state.userProfile = snap.exists() ? snap.data() : null;
-        state.userRole = state.userProfile?.role === 'admin' ? 'admin' : 'viewer';
+        const email = (u.email || '').toLowerCase();
+        const fallbackAdmin = TEMP_ADMIN_EMAILS.includes(email);
+        state.userRole = state.userProfile?.role === 'admin' || fallbackAdmin ? 'admin' : 'viewer';
+        if (!snap.exists() && fallbackAdmin) {
+          Logger.warn('RBAC fallback activo: admin temporal por email (crear usuarios_iser.role=admin).');
+        }
       } catch (err) {
         Logger.warn('No se pudo leer usuarios_iser:', err);
         state.userProfile = null;
-        state.userRole = 'viewer';
+        const email = (u.email || '').toLowerCase();
+        state.userRole = TEMP_ADMIN_EMAILS.includes(email) ? 'admin' : 'viewer';
       }
 
       setUser(u);

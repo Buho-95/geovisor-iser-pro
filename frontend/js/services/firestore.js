@@ -10,21 +10,23 @@ import {
   getDocs,
   deleteDoc,
   query,
-  where,
-  limit,
   orderBy,
   addDoc,
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js';
 import { db, storage } from './firebase.js';
 import { state, setArchivos, setEstadosBloques } from '../core/state.js';
-import { dbPath, COLLECTIONS, STORAGE_PATHS } from '../core/config.js';
+import { COLLECTIONS, STORAGE_PATHS } from '../core/config.js';
 import { on, EVENTS } from '../core/events.js';
 import { Logger } from '../core/logger.js';
 import { computeInventoryFingerprint } from '../core/inventoryHash.js';
+import { authenticatedFetchAny } from './api.js';
 
-const ARCHIVOS_PAGE = 2000;
-let unsubArchivos = null;
+const INVENTORY_FUNCTION_URL = '/api/getBlockInventory';
+let inventoryListenersInitialized = false;
+let offBlockSelected = null;
+let offAuthChanged = null;
+let activeInventoryRequest = 0;
 
 function applyCloudStatus(ok) {
   const status = document.getElementById('cloud-status');
@@ -40,47 +42,109 @@ function applyCloudStatus(ok) {
   }
 }
 
+function setLoading(loading, label = 'Conectando...') {
+  const status = document.getElementById('cloud-status');
+  if (!status) return;
+  if (loading) {
+    status.innerHTML = '<i class="ph ph-spinner-gap animate-spin"></i> ' + label;
+    status.className =
+      'flex items-center gap-2 px-3 py-1 bg-sky-50 text-sky-700 rounded-full text-xs font-bold border border-sky-200';
+  } else if (status.innerHTML.includes('spinner-gap')) {
+    status.innerHTML = '<i class="ph ph-map-pin"></i> Selecciona un bloque';
+    status.className =
+      'flex items-center gap-2 px-3 py-1 bg-slate-50 text-slate-600 rounded-full text-xs font-bold border border-slate-200';
+  }
+}
+
 /**
  * Escucha archivos del bloque actual (sin onSnapshot de colección completa).
  */
 export function initArchivosSubscription(onUpdate) {
-  const subscribe = (blockId) => {
-    if (unsubArchivos) {
-      unsubArchivos();
-      unsubArchivos = null;
+  if (inventoryListenersInitialized) {
+    return () => {
+      offBlockSelected?.();
+      offAuthChanged?.();
+      inventoryListenersInitialized = false;
+    };
+  }
+  inventoryListenersInitialized = true;
+  console.log('INIT APP');
+
+  const subscribe = async (blockId) => {
+    const requestId = ++activeInventoryRequest;
+    if (!state.user) {
+      Logger.warn('Auth aún no listo; se omite carga de inventario');
+      setLoading(false);
+      return;
     }
+
+    setLoading(true, 'Conectando...');
     if (!blockId) {
+      console.warn('No hay bloque seleccionado aún');
       state.archivosNube = [];
       setArchivos([]);
+      setLoading(false);
       onUpdate?.();
       return;
     }
-    const q = query(
-      collection(db, dbPath),
-      where('bloque', '==', blockId),
-      limit(ARCHIVOS_PAGE)
-    );
-    unsubArchivos = onSnapshot(
-      q,
-      (snapshot) => {
-        const docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        state.archivosNube = docs;
-        setArchivos(docs);
-        applyCloudStatus(true);
-        onUpdate?.();
-      },
-      (error) => {
-        Logger.error('Firestore sync error (bloque):', error);
-        applyCloudStatus(false);
-        onUpdate?.();
+    console.log('BLOCK SELECTED:', blockId);
+    try {
+      const response = await authenticatedFetchAny(INVENTORY_FUNCTION_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          blockId,
+          blockName: blockId,
+          sede: state.currentSede || 'pamplona',
+        }),
+      });
+      const payload = await response.json();
+      if (requestId !== activeInventoryRequest) return;
+      const inventario = payload?.inventario;
+      const docs = Array.isArray(inventario?.archivos) ? inventario.archivos : [];
+      state.archivosNube = docs;
+      setArchivos(docs);
+      applyCloudStatus(true);
+      onUpdate?.();
+    } catch (error) {
+      if (requestId !== activeInventoryRequest) return;
+      Logger.error('Inventory backend sync error:', error);
+      applyCloudStatus(false);
+      state.archivosNube = [];
+      setArchivos([]);
+      onUpdate?.();
+    } finally {
+      if (requestId === activeInventoryRequest) {
+        setLoading(false);
       }
-    );
+    }
   };
 
-  on(EVENTS.BLOCK_SELECTED, (blockId) => subscribe(blockId));
-  on(EVENTS.AUTH_STATE_CHANGED, () => subscribe(state.currentBlockId || null));
+  offBlockSelected = on(EVENTS.BLOCK_SELECTED, (blockId) => subscribe(blockId));
+  offAuthChanged = on(EVENTS.AUTH_STATE_CHANGED, (user) => {
+    if (!user) {
+      state.archivosNube = [];
+      setArchivos([]);
+      setLoading(false);
+      onUpdate?.();
+      return;
+    }
+    console.log('AUTH READY');
+    subscribe(state.currentBlockId || null);
+  });
 
-  subscribe(state.currentBlockId || null);
+  if (state.user) {
+    subscribe(state.currentBlockId || null);
+  } else {
+    setLoading(false);
+  }
+
+  return () => {
+    offBlockSelected?.();
+    offAuthChanged?.();
+    offBlockSelected = null;
+    offAuthChanged = null;
+    inventoryListenersInitialized = false;
+  };
 }
 
 /**
