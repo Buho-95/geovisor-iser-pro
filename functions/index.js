@@ -41,14 +41,31 @@ function applyCorsHeaders(res) {
 }
 
 function withCors(handler) {
-  return (req, res) =>
-    cors(req, res, async () => {
-      applyCorsHeaders(res);
-      if (req.method === 'OPTIONS') {
-        return res.status(204).send('');
-      }
-      return handler(req, res);
-    });
+  return async (req, res) => {
+    // CORS SIEMPRE primero: aplica también para respuestas de error/early return.
+    applyCorsHeaders(res);
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).send('');
+    }
+
+    try {
+      return await new Promise((resolve, reject) => {
+        cors(req, res, async () => {
+          try {
+            const out = await handler(req, res);
+            resolve(out);
+          } catch (err) {
+            reject(err);
+          }
+        });
+      });
+    } catch (error) {
+      console.error('Handler error:', error);
+      if (res.headersSent) return;
+      return res.status(500).json({ error: 'Internal error' });
+    }
+  };
 }
 
 function preAnalisisFromInventario(inventario) {
