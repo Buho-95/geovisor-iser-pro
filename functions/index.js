@@ -15,6 +15,7 @@ if (!admin.apps.length) {
 const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const cors = require('cors')({ origin: true });
 
 const { getNormativeConfig } = require('./configService');
 const { buildInventoryForBlock } = require('./storageInventory');
@@ -32,6 +33,23 @@ const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 let genAIInstance = null;
 
 const COL_INV = 'inventario_bloques';
+
+function applyCorsHeaders(res) {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+function withCors(handler) {
+  return (req, res) =>
+    cors(req, res, async () => {
+      applyCorsHeaders(res);
+      if (req.method === 'OPTIONS') {
+        return res.status(204).send('');
+      }
+      return handler(req, res);
+    });
+}
 
 function preAnalisisFromInventario(inventario) {
   const normative = getNormativeConfig();
@@ -308,18 +326,18 @@ IMPORTANTE: Responde SOLO con el JSON válido RFC 8259. Sin texto adicional, sin
 }
 
 const fnOpts = {
-  cors: true,
+  cors: false,
   region: 'us-central1',
   memory: '512MiB',
   timeoutSeconds: 120,
 };
 
-exports.getBlockInventory = onRequest(fnOpts, handleGetBlockInventory);
+exports.getBlockInventory = onRequest(fnOpts, withCors(handleGetBlockInventory));
 
 exports.getNormativeAudit = onRequest(
   {
     ...fnOpts,
     secrets: [GEMINI_API_KEY],
   },
-  handleGetNormativeAudit
+  withCors(handleGetNormativeAudit)
 );
