@@ -1,18 +1,23 @@
 /**
  * Cloud Functions — Geovisor ISER PRO
- * getBlockInventory: índice de Storage (Admin SDK) → Firestore + respuesta
- * getNormativeAudit: proxy Gemini con Auth + rol admin
+ * Solo definiciones: handlers + exports. Sin I/O ni async en nivel superior.
+ *
+ * Nota: en CommonJS (recomendado por Firebase) se usa exports.nombre = onRequest(...),
+ * equivalente a export const nombre = onRequest(...) en ESM.
  */
 'use strict';
 
-const path = require('path');
 const admin = require('firebase-admin');
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+
 const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const normative = require(path.join(__dirname, '..', 'frontend', 'shared', 'normative-config.json'));
-const { buildInventoryForBlock, STORAGE_BASE } = require('./storageInventory');
+const { getNormativeConfig } = require('./configService');
+const { buildInventoryForBlock } = require('./storageInventory');
 const { computeInventoryFingerprint } = require('./inventoryHash');
 const {
   checkRateLimit,
@@ -22,10 +27,6 @@ const {
   logStructured,
 } = require('./httpGuards');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
-
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 
 let genAIInstance = null;
@@ -33,6 +34,7 @@ let genAIInstance = null;
 const COL_INV = 'inventario_bloques';
 
 function preAnalisisFromInventario(inventario) {
+  const normative = getNormativeConfig();
   const archivos = inventario.archivos || [];
   const REQUISITOS = normative.keywords;
   const out = {};
@@ -58,7 +60,7 @@ function preAnalisisFromInventario(inventario) {
 }
 
 function semaforoFromScore(puntaje, thresholds) {
-  const t = thresholds || normative.thresholds;
+  const t = thresholds || getNormativeConfig().thresholds;
   let nivel = 'rojo';
   let colorHex = '#EF4444';
   if (puntaje >= t.semaforoVerde) {
@@ -151,6 +153,18 @@ async function handleGetNormativeAudit(req, res) {
   const apiKey = GEMINI_API_KEY.value();
   if (!apiKey) {
     res.status(500).json({ error: 'GEMINI_API_KEY no configurada en Firebase Secrets.' });
+    return;
+  }
+
+  let normative;
+  try {
+    normative = getNormativeConfig();
+  } catch (e) {
+    logStructured('normative_config_handler_error', { message: e.message });
+    res.status(500).json({
+      error: 'Configuración normativa no disponible',
+      detail: e.message,
+    });
     return;
   }
 

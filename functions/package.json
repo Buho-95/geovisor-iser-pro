@@ -12,7 +12,7 @@
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "test": "node --test tests/inventory-hash.test.js"
+    "test": "node --test tests/inventory-hash.test.js tests/config-service.test.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
