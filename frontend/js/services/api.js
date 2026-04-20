@@ -3,22 +3,56 @@
  */
 import { auth } from './firebase.js';
 import { Logger } from '../core/logger.js';
+import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+
+async function waitForAuthReady(timeoutMs = 12000) {
+  if (auth.currentUser) return auth.currentUser;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      off?.();
+      reject(new Error('Auth no disponible aún'));
+    }, timeoutMs);
+    const off = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
+      clearTimeout(timer);
+      off?.();
+      resolve(user);
+    });
+  });
+}
 
 async function fetchWithIdToken(url, options, requireNonAnonymous) {
-  const user = auth.currentUser;
+  const user = await waitForAuthReady();
   if (!user) {
     throw new Error('Se requiere sesión');
   }
   if (requireNonAnonymous && user.isAnonymous) {
     throw new Error('Se requiere sesión de administrador');
   }
-  const token = await user.getIdToken();
-  const headers = {
+
+  let token = await user.getIdToken();
+  console.log('TOKEN READY', token?.slice?.(0, 20) || 'token');
+  let headers = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
     ...options.headers,
   };
-  const res = await fetch(url, { ...options, headers });
+
+  console.log('API CALL WITH AUTH', url);
+  let res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    Logger.warn(`401 en ${url}, refrescando token y reintentando`);
+    token = await user.getIdToken(true);
+    console.log('TOKEN READY', token?.slice?.(0, 20) || 'token-refreshed');
+    headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...options.headers,
+    };
+    console.log('API CALL WITH AUTH', `${url} (retry)`);
+    res = await fetch(url, { ...options, headers });
+  }
+
   if (!res.ok) {
     let detail = res.statusText;
     try {

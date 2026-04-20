@@ -42,6 +42,14 @@ function applyCloudStatus(ok) {
   }
 }
 
+function setErrorStatus(msg = 'Error de carga') {
+  const status = document.getElementById('cloud-status');
+  if (!status) return;
+  status.innerHTML = `<i class="ph ph-warning-circle"></i> ${msg}`;
+  status.className =
+    'flex items-center gap-2 px-3 py-1 bg-rose-50 text-rose-700 rounded-full text-xs font-bold border border-rose-200';
+}
+
 function setLoading(loading, label = 'Conectando...') {
   const status = document.getElementById('cloud-status');
   if (!status) return;
@@ -108,7 +116,7 @@ export function initArchivosSubscription(onUpdate) {
     } catch (error) {
       if (requestId !== activeInventoryRequest) return;
       Logger.error('Inventory backend sync error:', error);
-      applyCloudStatus(false);
+      setErrorStatus('Error de carga');
       state.archivosNube = [];
       setArchivos([]);
       onUpdate?.();
