@@ -10,6 +10,7 @@
 import { getReportHistory, deleteReport } from '../services/firestore.js';
 import { isAdmin } from '../services/auth.js';
 import { Logger } from '../core/logger.js';
+import { escapeHtml } from '../core/safe-dom.js';
 
 let isLoaded = false;
 let reportsList = [];
@@ -57,7 +58,8 @@ export async function initReportHistory() {
 
   observer.observe(container);
 
-  // Refresh button
+  document.getElementById('report-history-list')?.addEventListener('click', handleListClick);
+
   document.getElementById('btn-refresh-history')?.addEventListener('click', () => {
     isLoaded = false;
     loadHistory();
@@ -79,6 +81,16 @@ async function loadHistory() {
   `;
 
   try {
+    if (!isAdmin()) {
+      listEl.innerHTML = `
+        <div class="report-history-empty">
+          <i class="ph ph-lock"></i>
+          <span>El historial de reportes solo está disponible para administradores.</span>
+        </div>
+      `;
+      isLoaded = true;
+      return;
+    }
     reportsList = await getReportHistory();
     isLoaded = true;
     renderList(listEl);
@@ -120,30 +132,35 @@ function renderList(listEl) {
     const blockName = report.blockName || report.blockId || 'Bloque desconocido';
     const userEmail = report.userEmail || 'Usuario desconocido';
 
+    const safeBlock = escapeHtml(blockName);
+    const safeUser = escapeHtml(userEmail.split('@')[0]);
+    const safeUrl = escapeHtml(report.downloadUrl || '');
+    const rid = String(report.id || '').replace(/"/g, '');
+    const spath = String(report.storagePath || '').replace(/"/g, '');
     return `
-      <div class="report-history-item" data-report-id="${report.id}">
+      <div class="report-history-item" data-report-id="${rid}">
         <div class="report-history-item-icon">
           <i class="ph ph-file-pdf"></i>
         </div>
         <div class="report-history-item-info">
-          <span class="report-history-item-name">${blockName}</span>
+          <span class="report-history-item-name">${safeBlock}</span>
           <span class="report-history-item-meta">
             <i class="ph ph-calendar-blank"></i> ${fecha}
             <span class="report-history-item-user">
-              <i class="ph ph-user"></i> ${userEmail.split('@')[0]}
+              <i class="ph ph-user"></i> ${safeUser}
             </span>
           </span>
         </div>
         <div class="report-history-item-actions">
           ${userIsAdmin ? `
-            <button class="report-history-btn report-history-btn-download admin-only" 
-                    data-url="${report.downloadUrl}" title="Descargar PDF">
+            <button type="button" class="report-history-btn report-history-btn-download admin-only" 
+                    data-url="${safeUrl}" title="Descargar PDF">
               <i class="ph ph-download-simple"></i>
             </button>
-            <button class="report-history-btn report-history-btn-delete admin-only" 
-                    data-report-id="${report.id}" 
-                    data-storage-path="${report.storagePath || ''}" 
-                    data-block-name="${blockName}"
+            <button type="button" class="report-history-btn report-history-btn-delete admin-only" 
+                    data-report-id="${rid}" 
+                    data-storage-path="${spath}" 
+                    data-block-name="${safeBlock}"
                     title="Eliminar reporte">
               <i class="ph ph-trash"></i>
             </button>
@@ -152,9 +169,6 @@ function renderList(listEl) {
       </div>
     `;
   }).join('');
-
-  // Wire event listeners via delegation
-  listEl.addEventListener('click', handleListClick);
 }
 
 /**

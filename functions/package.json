@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Firebase Cloud Functions para Geovisor ISER",
   "engines": {
-    "node": "24"
+    "node": "20"
   },
   "main": "index.js",
   "scripts": {
@@ -11,7 +11,8 @@
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test": "node --test tests/inventory-hash.test.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

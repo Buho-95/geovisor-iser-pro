@@ -10,6 +10,10 @@
       {
         "source": "/api/getNormativeAudit",
         "function": "getNormativeAudit"
+      },
+      {
+        "source": "/api/getBlockInventory",
+        "function": "getBlockInventory"
       }
     ]
   },
@@ -18,7 +22,8 @@
     "runtime": "nodejs20"
   },
   "firestore": {
-    "rules": "firestore.rules"
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   },
   "storage": {
     "rules": "storage.rules"

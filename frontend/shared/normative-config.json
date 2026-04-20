@@ -1,0 +1,33 @@
+{
+  "keywords": {
+    "NSR-10": [
+      "cimentacion", "cimentación", "fundacion", "fundación",
+      "viga", "despiece", "columna", "memoria", "calculo", "cálculo",
+      "estructural", "placa", "zapata", "pedestal", "refuerzo",
+      "nsr", "sismo", "resistencia"
+    ],
+    "NTC-6047": [
+      "accesibilidad", "rampa", "ntc", "6047",
+      "discapacidad", "movilidad", "reducida", "baranda",
+      "señalizacion", "señalización", "braille", "tactil", "táctil",
+      "matriz_accesibilidad", "acceso_universal"
+    ],
+    "RETIE": [
+      "electrico", "eléctrico", "carga", "cuadro",
+      "tablero", "retie", "acometida", "circuito",
+      "iluminacion", "iluminación", "subestacion", "subestación",
+      "transformador", "potencia", "diagrama_unifilar"
+    ]
+  },
+  "thresholds": {
+    "semaforoVerde": 85,
+    "semaforoAmarillo": 60,
+    "mapaVerde": 80,
+    "mapaAmarillo": 50
+  },
+  "futurePdfAnalysis": {
+    "enabled": false,
+    "maxPagesPerFile": 0,
+    "note": "Reservado: extracción de texto PDF vía backend (Vertex/Gemini Files) — no activar hasta definir cuotas y privacidad."
+  }
+}

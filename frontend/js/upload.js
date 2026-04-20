@@ -7,6 +7,7 @@ import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/fir
 import { storage, db } from './services/firebase.js';
 import { dbPath, storageBasePath } from './core/config.js';
 import { state } from './core/state.js';
+import { isAdmin } from './services/auth.js';
 import { getFileManager } from './file-manager.js';
 import { estructuraPlanimetriaISER, formatearNombreCarpeta } from './planoteca-structure.js';
 
@@ -251,7 +252,7 @@ export function setupUpload() {
 
   document.getElementById('upload-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!state.user || !state.currentBlockId) return;
+    if (!state.user || !state.currentBlockId || !isAdmin()) return;
 
     const fileManager = getFileManager();
     const selectedFiles = fileManager ? fileManager.getSelectedFiles() : [];

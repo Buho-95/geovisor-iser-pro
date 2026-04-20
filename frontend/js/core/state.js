@@ -6,7 +6,7 @@ import { emit, EVENTS } from './events.js';
 export const state = {
   user: null,
   userProfile: null,
-  userRole: null, // 'visitor' | 'admin'
+  userRole: null, // 'visitor' | 'viewer' | 'admin'
   archivosNube: [],
   currentBlockId: null,
   currentFileViewing: null,

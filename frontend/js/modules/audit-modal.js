@@ -12,6 +12,7 @@ import { state } from '../core/state.js';
 import { getCampusData } from '../campus-data.js';
 import { isAdmin } from '../services/auth.js';
 import { Logger } from '../core/logger.js';
+import { setTextContent, escapeHtml } from '../core/safe-dom.js';
 
 let modalEl = null;
 let capturedChartImages = {};
@@ -163,7 +164,7 @@ export function openAuditPreviewModal(onConfirm) {
   // Summary
   const summaryEl = document.getElementById('audit-modal-summary');
   const textoIA = (estadoData.diagnostico_texto || 'Sin diagnóstico generado. Ejecute la auditoría primero.').replace(/[%!&🛡️⚠️]/g, '');
-  summaryEl.innerHTML = textoIA;
+  setTextContent(summaryEl, textoIA);
 
   // Charts
   const chartsSection = document.getElementById('audit-modal-charts-section');
@@ -201,7 +202,7 @@ export function openAuditPreviewModal(onConfirm) {
       else if (puntaje >= 60) barColor = '#F59E0B';
       normasHtml += `
         <div class="audit-modal-norma-row">
-          <span class="audit-modal-norma-name">${norma}</span>
+          <span class="audit-modal-norma-name">${escapeHtml(norma)}</span>
           <div class="audit-modal-norma-bar">
             <div class="audit-modal-norma-bar-fill" style="width:${puntaje}%;background:${barColor}"></div>
           </div>

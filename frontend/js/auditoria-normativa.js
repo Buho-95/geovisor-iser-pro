@@ -1,8 +1,8 @@
 /**
  * Módulo de Auditoría de Integridad Normativa — Fase 3 (Persistencia + Visitante)
  * =========================================================================
- * Módulo 100% AISLADO. Escanea archivos en Firebase Storage,
- * envía inventario a la Cloud Function 'getNormativeAudit' (backend seguro)
+ * Módulo 100% AISLADO. Inventario vía Cloud Function getBlockInventory (Admin SDK),
+ * auditoría vía getNormativeAudit (Gemini en backend).
  * para auditoría normativa colombiana (NSR-10, NTC 6047, RETIE),
  * y renderiza resultados en el Dashboard.
  *
@@ -19,53 +19,34 @@
  * REGLAS DE ORO: Este módulo NO modifica ni referencia ninguna función
  * de mantenimiento.js (generateAIDiagnosis, renderMantCharts, exportarInformeOficial).
  */
-import { storage } from './services/firebase.js';
-import { ref, listAll, getMetadata } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js';
 import { state } from './core/state.js';
 import { on, EVENTS } from './core/events.js';
 import { getCampusData } from './campus-data.js';
 import { Logger } from './core/logger.js';
-import { storageBasePath } from './core/config.js';
 import { getAuditoriaCached, guardarAuditoria, guardarEstadoBloque } from './services/firestore.js';
 import { isAdmin } from './services/auth.js';
+import { authenticatedFetch, authenticatedFetchAny } from './services/api.js';
+import { computeInventoryFingerprint } from './core/inventoryHash.js';
+import { setTextContent, escapeHtml } from './core/safe-dom.js';
+import normative from '../shared/normative-config.json' assert { type: 'json' };
 
-// ─── URL de la Cloud Function (relativa al mismo dominio en producción) ───
-// En desarrollo local, apunta al emulador de Firebase Functions.
 const AUDIT_FUNCTION_URL = '/api/getNormativeAudit';
+const INVENTORY_FUNCTION_URL = '/api/getBlockInventory';
 
-// ─── Normative Requirements Definition ───
 const REQUISITOS_NORMATIVOS = {
   'NSR-10': {
     label: 'NSR-10 (Sismo Resistencia)',
     icon: '🏗️',
-    keywords: [
-      'cimentacion', 'cimentación', 'fundacion', 'fundación',
-      'viga', 'despiece', 'columna', 'memoria', 'calculo', 'cálculo',
-      'estructural', 'placa', 'zapata', 'pedestal', 'refuerzo',
-      'nsr', 'sismo', 'resistencia'
-    ],
     descripcion: 'Planos de cimentación, despiece de vigas y memorias de cálculo estructural'
   },
   'NTC-6047': {
     label: 'NTC 6047 (Accesibilidad)',
     icon: '♿',
-    keywords: [
-      'accesibilidad', 'rampa', 'ntc', '6047',
-      'discapacidad', 'movilidad', 'reducida', 'baranda',
-      'señalizacion', 'señalización', 'braille', 'tactil', 'táctil',
-      'matriz_accesibilidad', 'acceso_universal'
-    ],
     descripcion: 'Planos de accesibilidad, rampas y matrices de cumplimiento NTC 6047'
   },
   'RETIE': {
     label: 'RETIE (Instalaciones Eléctricas)',
     icon: '⚡',
-    keywords: [
-      'electrico', 'eléctrico', 'carga', 'cuadro',
-      'tablero', 'retie', 'acometida', 'circuito',
-      'iluminacion', 'iluminación', 'subestacion', 'subestación',
-      'transformador', 'potencia', 'diagrama_unifilar'
-    ],
     descripcion: 'Cuadros de cargas, planos eléctricos y documentación RETIE'
   }
 };
@@ -75,145 +56,37 @@ let lastAuditResult = null;
 let isAuditing = false;
 
 /**
- * Genera un fingerprint del inventario de archivos para comparar con la caché.
- */
-function generarArchivoHash(inventario) {
-  return inventario.totalArchivos + ':' +
-    inventario.archivos
-      .map(a => a.nombre + (a.updated ? '@' + a.updated : ''))
-      .sort()
-      .join('|');
-}
-
-/**
- * 1. EXTRACCIÓN DE DATOS — Escanea archivos de un bloque en Firebase Storage.
- * Usa listAll() recursivamente para inventariar toda la planoteca del bloque.
- *
- * @param {string} blockId — ID del bloque (ej: 'bloque_a')
- * @returns {Promise<Object>} — Inventario JSON con archivos, extensiones, subcarpetas
+ * Inventario del bloque vía Cloud Function (Admin SDK + mismas rutas legado que antes).
  */
 async function escanearArchivosBloque(blockId) {
-  const sede = state.currentSede || 'pamplona';
-
-  const basePath = `${storageBasePath}/${blockId}`;
-  const storageRef = ref(storage, basePath);
-
   const campusInfo = getCampusData();
   const blockName = campusInfo[blockId]?.name || blockId;
+  const sede = state.currentSede || 'pamplona';
 
-  const inventario = {
-    blockId,
-    blockName,
-    sede,
-    basePath,
-    archivos: [],
-    subcarpetas: new Set(),
-    totalArchivos: 0,
-    scanTimestamp: new Date().toISOString()
-  };
+  Logger.info(`🔐 Solicitando inventario al backend: ${INVENTORY_FUNCTION_URL}`);
 
-  // Recursive scan helper (escanea Nivel 1, 2, 3...)
-  async function escanearCarpeta(folderRef, carpetaActual = '') {
-    try {
-      const result = await listAll(folderRef);
-
-      // Process files (items) concurrently via Promise.all
-      const filePromises = result.items.map(async (itemRef) => {
-        const nombre = itemRef.name;
-        const extension = nombre.includes('.') ? nombre.split('.').pop().toLowerCase() : 'sin_extension';
-        
-        let metadata = {};
-        try {
-          const meta = await getMetadata(itemRef);
-          metadata = {
-            size: meta.size,
-            contentType: meta.contentType,
-            timeCreated: meta.timeCreated,
-            updated: meta.updated // Used for global catch invalidation
-          };
-        } catch {
-          // Global catch para archivos individuales: fallbacks silenciosos
-        }
-
-        return {
-          nombre,
-          extension,
-          carpeta: carpetaActual || 'raíz',
-          rutaCompleta: itemRef.fullPath,
-          ...metadata
-        };
-      });
-
-      // Wait for all metadata concurrently
-      const resolvedFiles = await Promise.all(filePromises);
-      inventario.archivos.push(...resolvedFiles);
-
-      // Process subfolders (prefixes)
-      for (const prefixRef of result.prefixes) {
-        const subfolderName = prefixRef.name;
-        const subfolderPath = carpetaActual ? `${carpetaActual}/${subfolderName}` : subfolderName;
-        inventario.subcarpetas.add(subfolderPath);
-        
-        // Recurse into subfolder (Nivel 2, 3, etc.)
-        await escanearCarpeta(prefixRef, subfolderPath);
-      }
-    } catch (err) {
-      Logger.warn(`Error escaneando carpeta ${carpetaActual || basePath}:`, err.message);
-    }
+  const response = await authenticatedFetchAny(INVENTORY_FUNCTION_URL, {
+    method: 'POST',
+    body: JSON.stringify({ blockId, blockName, sede }),
+  });
+  const data = await response.json();
+  if (!data.inventario) {
+    throw new Error('Respuesta de inventario inválida');
   }
-
-  await escanearCarpeta(storageRef);
-
-  // ── Fallback 1: intentando ruta 'documentos_iser/sede/blockId' en caso de legado ──
-  if (inventario.archivos.length === 0) {
-    Logger.info(`📂 Sin archivos en "${basePath}". Intentando fallback legado: "${storageBasePath}/${sede}/${blockId}"`);
-    const fallbackRef = ref(storage, `${storageBasePath}/${sede}/${blockId}`);
-    inventario.basePath_fallback = `${storageBasePath}/${sede}/${blockId}`;
-    await escanearCarpeta(fallbackRef);
-  }
-
-  // ── Fallback 2: intentando ruta con blockName visible (para asegurar) ──
-  if (inventario.archivos.length === 0 && blockName !== blockId) {
-    Logger.info(`📂 Aún sin archivos. Intentando fallback con nombre: "${storageBasePath}/${blockName}"`);
-    const fallbackNameRef = ref(storage, `${storageBasePath}/${blockName}`);
-    await escanearCarpeta(fallbackNameRef);
-  }
-
-  // Convert Set to Array for JSON serialization
-  inventario.subcarpetas = Array.from(inventario.subcarpetas);
-  inventario.totalArchivos = inventario.archivos.length;
-
-  Logger.info(`📂 Escaneo completado: ${inventario.totalArchivos} archivos en ${inventario.subcarpetas.length} carpetas`);
-  return inventario;
+  Logger.info(
+    `📂 Inventario servidor: ${data.inventario.totalArchivos} archivos en ${(data.inventario.subcarpetas || []).length} carpetas`
+  );
+  return data.inventario;
 }
 
-
-/**
- * 2. LÓGICA DE AUDITORÍA — Envía inventario a la Cloud Function getNormativeAudit.
- * La Cloud Function actúa como proxy seguro hacia Gemini AI en el servidor.
- * La API Key de Gemini NUNCA se expone en el frontend.
- *
- * @param {Object} inventario — Resultado de escanearArchivosBloque()
- * @returns {Promise<Object>} — Resultado de auditoría con puntaje, faltantes, resumen
- */
 async function auditoriaDocumentalIA(inventario) {
   Logger.info(`🔐 Enviando inventario a Cloud Function: ${AUDIT_FUNCTION_URL}`);
 
-  const response = await fetch(AUDIT_FUNCTION_URL, {
+  const response = await authenticatedFetch(AUDIT_FUNCTION_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ inventario })
+    body: JSON.stringify({ inventario }),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(`Cloud Function falló (${response.status}): ${errorData.error || response.statusText}`);
-  }
-
-  const result = await response.json();
-  return result;
+  return response.json();
 }
 
 /**
@@ -224,9 +97,10 @@ async function aplicarEstadoBloque(blockId, auditResult) {
   if (!state.estadosBloques[blockId]) state.estadosBloques[blockId] = {};
   
   const score = auditResult.puntaje_global || 0;
-  let colorSugerido = '#EF4444'; // Red < 50
-  if (score > 80) colorSugerido = '#10B981'; // Green > 80
-  else if (score >= 50) colorSugerido = '#F59E0B'; // Yellow 50-80
+  const th = normative.thresholds;
+  let colorSugerido = '#EF4444';
+  if (score > th.mapaVerde) colorSugerido = '#10B981';
+  else if (score >= th.mapaAmarillo) colorSugerido = '#F59E0B';
 
   state.estadosBloques[blockId].diagnostico_texto = auditResult.resumen_ejecutivo;
   state.estadosBloques[blockId].score_infraestructura = score;
@@ -419,7 +293,7 @@ function renderPanelAuditoria() {
         // ── Escanear archivos para comparar fingerprint ──
         if (spinnerText) spinnerText.textContent = 'Verificando vigencia del inventario...';
         const inventario = await escanearArchivosBloque(blockId);
-        const currentHash = generarArchivoHash(inventario);
+        const currentHash = computeInventoryFingerprint(inventario);
         
         const cacheVigente = cached.archivoHash === currentHash;
 
@@ -622,9 +496,8 @@ function renderAuditResults(data) {
   // ── Resumen ejecutivo ──
   const resumen = document.getElementById('audit-resumen');
   if (resumen) {
-    // Reemplaza los caracteres extraños si quedan y lo inyecta como HTML
     const textoIA = (data.resumen_ejecutivo || 'Sin resumen disponible.').replace(/[%!&🛡️⚠️]/g, '');
-    resumen.innerHTML = textoIA;
+    setTextContent(resumen, textoIA);
     resumen.style.overflowY = 'auto';
     resumen.style.maxHeight = '250px';
     resumen.style.paddingRight = '8px';
@@ -638,16 +511,17 @@ function renderAuditResults(data) {
     Object.entries(data.normas).forEach(([normaKey, normaData]) => {
       const config = REQUISITOS_NORMATIVOS[normaKey] || { icon: '📋', label: normaKey };
       const puntaje = normaData.puntaje || 0;
+      const th = normative.thresholds;
       let barColor = '#EF4444';
-      if (puntaje >= 85) barColor = '#10B981';
-      else if (puntaje >= 60) barColor = '#F59E0B';
+      if (puntaje >= th.semaforoVerde) barColor = '#10B981';
+      else if (puntaje >= th.semaforoAmarillo) barColor = '#F59E0B';
 
       const encontradosHtml = (normaData.encontrados || [])
-        .map(d => `<span class="audit-doc-tag found"><i class="ph ph-check-circle"></i> ${d}</span>`)
+        .map((d) => `<span class="audit-doc-tag found"><i class="ph ph-check-circle"></i> ${escapeHtml(d)}</span>`)
         .join('');
 
       const faltantesHtml = (normaData.faltantes_criticos || [])
-        .map(d => `<span class="audit-doc-tag missing"><i class="ph ph-warning-circle"></i> ${d}</span>`)
+        .map((d) => `<span class="audit-doc-tag missing"><i class="ph ph-warning-circle"></i> ${escapeHtml(d)}</span>`)
         .join('');
 
       normasHtml += `
@@ -660,7 +534,7 @@ function renderAuditResults(data) {
           <div class="audit-norma-bar">
             <div class="audit-norma-bar-fill" style="width:${puntaje}%;background:${barColor}"></div>
           </div>
-          ${normaData.observacion ? `<p class="audit-norma-obs">${normaData.observacion}</p>` : ''}
+          ${normaData.observacion ? `<p class="audit-norma-obs">${escapeHtml(normaData.observacion)}</p>` : ''}
           ${encontradosHtml ? `<div class="audit-doc-list">${encontradosHtml}</div>` : ''}
           ${faltantesHtml ? `<div class="audit-doc-list">${faltantesHtml}</div>` : ''}
         </div>
@@ -678,12 +552,12 @@ function renderAuditResults(data) {
       'MEDIA': '#3B82F6'
     };
 
-    taskList.innerHTML = data.tareas_pendientes.map(t => {
+    taskList.innerHTML = data.tareas_pendientes.map((t) => {
       const color = prioridadColors[t.prioridad] || '#64748B';
       return `
         <li class="audit-task-item">
-          <span class="audit-task-priority" style="background:${color}20;color:${color};border:1px solid ${color}40">${t.prioridad}</span>
-          <span class="audit-task-desc">${t.descripcion}</span>
+          <span class="audit-task-priority" style="background:${color}20;color:${color};border:1px solid ${color}40">${escapeHtml(t.prioridad)}</span>
+          <span class="audit-task-desc">${escapeHtml(t.descripcion)}</span>
         </li>
       `;
     }).join('');
@@ -732,10 +606,11 @@ function renderEmptyState(container, blockId, isVisitorNoCache = false) {
 function renderErrorState(container, message) {
   if (!container) return;
   container.style.display = '';
+  const safe = escapeHtml(message || '');
   container.innerHTML = `
     <div class="audit-error-state">
       <i class="ph ph-warning-octagon" style="font-size:2rem;color:#EF4444;"></i>
-      <p>Error durante la auditoría: ${message}</p>
+      <p>Error durante la auditoría: ${safe}</p>
       <p class="audit-error-hint">El Dashboard sigue funcionando normalmente. Intenta de nuevo o verifica la conexión.</p>
     </div>
   `;

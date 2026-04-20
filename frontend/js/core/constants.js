@@ -8,7 +8,8 @@ export const COLLECTIONS = {
   ESTADISTICAS: 'estadisticas',
   ESTADOS_BLOQUES: 'bloques_estado',
   AUDITORIAS_BLOQUES: 'auditorias_bloques',
-  REPORTES_HISTORIAL: 'reportes_historial'
+  REPORTES_HISTORIAL: 'reportes_historial',
+  INVENTARIO_BLOQUES: 'inventario_bloques'
 };
 
 export const STORAGE_PATHS = {

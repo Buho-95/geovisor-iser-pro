@@ -4,7 +4,7 @@
 import { Logger } from './core/logger.js';
 import { state, setSede, setCurrentBlock } from './core/state.js';
 import { initAuth } from './services/auth.js';
-import { startArchivosSync, startEstadosBloquesSync } from './services/firestore.js';
+import { initArchivosSubscription, startEstadosBloquesSync } from './services/firestore.js';
 import { init as initLayerManager } from './plugins/layer-manager.js';
 import {
   initLeafletMap,
@@ -81,8 +81,7 @@ export async function bootstrap() {
       }, 500);
     },
     onAuthChange(u) {
-      // Start Firestore sync for both visitor and admin (read-only is fine)
-      startArchivosSync(() => {
+      initArchivosSubscription(() => {
         if (state.currentBlockId) {
           showBlockView(state.currentBlockId, (blockId) => state.archivosNube?.filter(a => a.bloque === blockId) || []);
         }
@@ -243,7 +242,11 @@ export async function bootstrap() {
       Logger.error('❌ Error cargando Dashboard Pro:', e);
       const el = document.getElementById('dashboard-container');
       if (el) {
-        el.innerHTML = '<div style="padding:16px;color:var(--text-muted);font-size:0.85rem;">No se pudo cargar el Dashboard.</div>';
+        el.textContent = '';
+        const d = document.createElement('div');
+        d.style.cssText = 'padding:16px;color:var(--text-muted);font-size:0.85rem;';
+        d.textContent = 'No se pudo cargar el Dashboard.';
+        el.appendChild(d);
       }
     }
   }

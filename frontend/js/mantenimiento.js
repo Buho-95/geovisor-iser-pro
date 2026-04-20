@@ -13,6 +13,7 @@ import { Logger } from './core/logger.js';
 import { openAuditPreviewModal } from './modules/audit-modal.js';
 import { refreshHistory } from './modules/report-history.js';
 import { isAdmin } from './services/auth.js';
+import { setTextContent } from './core/safe-dom.js';
 
 // ─── DOM References ───
 let formEl, bloqueSelect, estadoSelect, fechaInput;
@@ -460,7 +461,11 @@ function initMantenimiento() {
     }
   } catch (err) {
     Logger.error("Error poblando bloques en Mantenimiento:", err);
-    bloqueSelect.innerHTML = `<option value="">Error interno: ${err.message}</option>`;
+    bloqueSelect.textContent = '';
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = `Error interno: ${err.message}`;
+    bloqueSelect.appendChild(opt);
   }
 
   // Set today's date as default
@@ -493,7 +498,7 @@ function initMantenimiento() {
         const dashTextContainer = document.getElementById('audit-resumen');
         if (dashTextContainer) {
           const textoLimpiado = (existingState.diagnostico_texto || "Sin datos de auditoría.").replace(/[%!&🛡️⚠️]/g, '');
-          dashTextContainer.innerHTML = textoLimpiado;
+          setTextContent(dashTextContainer, textoLimpiado);
           dashTextContainer.style.overflowY = 'auto';
           dashTextContainer.style.maxHeight = '250px';
           dashTextContainer.style.paddingRight = '8px';
@@ -502,7 +507,7 @@ function initMantenimiento() {
       } else {
         renderMantCharts(null);
         const dashTextContainer = document.getElementById('audit-resumen');
-        if (dashTextContainer) dashTextContainer.innerHTML = 'Sin datos de auditoría.';
+        if (dashTextContainer) setTextContent(dashTextContainer, 'Sin datos de auditoría.');
       }
     } else {
       contextSummary.style.display = 'none';

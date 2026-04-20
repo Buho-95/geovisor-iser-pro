@@ -1,120 +1,174 @@
 /**
- * Cloud Functions para Geovisor ISER
- * =====================================
- * getNormativeAudit: Proxy seguro hacia la API de Gemini.
- * La API Key de Gemini se obtiene desde Firebase Secrets (--set-secrets GEMINI_API_KEY=...)
- * y nunca se expone en el frontend.
- *
- * Despliegue: firebase deploy --only functions
+ * Cloud Functions — Geovisor ISER PRO
+ * getBlockInventory: índice de Storage (Admin SDK) → Firestore + respuesta
+ * getNormativeAudit: proxy Gemini con Auth + rol admin
  */
+'use strict';
 
+const path = require('path');
+const admin = require('firebase-admin');
 const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// ── Variables Globales para Caché (Singleton / Warm Starts) ──
-let genAIInstance = null;
+const normative = require(path.join(__dirname, '..', 'frontend', 'shared', 'normative-config.json'));
+const { buildInventoryForBlock, STORAGE_BASE } = require('./storageInventory');
+const { computeInventoryFingerprint } = require('./inventoryHash');
+const {
+  checkRateLimit,
+  bodyTooLarge,
+  verifyBearerAndAdmin,
+  verifyBearerAnyUser,
+  logStructured,
+} = require('./httpGuards');
 
-// ── Secret: API Key de Gemini (almacenada en Firebase Secret Manager) ──
-// Para configurar: firebase functions:secrets:set GEMINI_API_KEY
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 
-/**
- * getNormativeAudit — Cloud Function HTTPS
- * POST /api/getNormativeAudit
- *
- * Body esperado:
- * {
- *   "inventario": {
- *     "blockId": "ib",
- *     "blockName": "Bloque IB",
- *     "sede": "pamplona",
- *     "archivos": [...],
- *     "subcarpetas": [...],
- *     "totalArchivos": 25
- *   }
- * }
- *
- * Respuesta: JSON con puntaje, normas, tareas_pendientes, etc.
- */
-exports.getNormativeAudit = onRequest(
-  {
-    secrets: [GEMINI_API_KEY],
-    cors: true,           // Permite peticiones desde el Hosting de Firebase
-    region: 'us-central1',
-    memory: '512MiB',
-    timeoutSeconds: 120,
-  },
-  async (req, res) => {
-    // ── Validación de método ──
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: 'Método no permitido. Usa POST.' });
-      return;
-    }
+let genAIInstance = null;
 
-    // ── Leer el inventario del body ──
-    const { inventario } = req.body || {};
-    if (!inventario || !inventario.archivos || !inventario.blockId) {
-      res.status(400).json({ error: 'Body inválido. Se requiere { inventario: { blockId, archivos, subcarpetas } }' });
-      return;
-    }
+const COL_INV = 'inventario_bloques';
 
-    const apiKey = GEMINI_API_KEY.value();
-    if (!apiKey) {
-      res.status(500).json({ error: 'GEMINI_API_KEY no configurada en Firebase Secrets.' });
-      return;
-    }
-
-    // ── Pre-análisis local por keywords normativos ──
-    const REQUISITOS_NORMATIVOS = {
-      'NSR-10': {
-        keywords: [
-          'cimentacion', 'cimentación', 'fundacion', 'fundación',
-          'viga', 'despiece', 'columna', 'memoria', 'calculo', 'cálculo',
-          'estructural', 'placa', 'zapata', 'pedestal', 'refuerzo',
-          'nsr', 'sismo', 'resistencia'
-        ]
-      },
-      'NTC-6047': {
-        keywords: [
-          'accesibilidad', 'rampa', 'ntc', '6047',
-          'discapacidad', 'movilidad', 'reducida', 'baranda',
-          'señalizacion', 'señalización', 'braille', 'tactil', 'táctil',
-          'matriz_accesibilidad', 'acceso_universal'
-        ]
-      },
-      'RETIE': {
-        keywords: [
-          'electrico', 'eléctrico', 'carga', 'cuadro',
-          'tablero', 'retie', 'acometida', 'circuito',
-          'iluminacion', 'iluminación', 'subestacion', 'subestación',
-          'transformador', 'potencia', 'diagrama_unifilar'
-        ]
-      }
-    };
-
-    const preAnalisis = {};
-    Object.entries(REQUISITOS_NORMATIVOS).forEach(([norma, config]) => {
-      const encontrados = inventario.archivos.filter(archivo => {
-        const nombreLower = archivo.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const carpetaLower = (archivo.carpeta || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        return config.keywords.some(kw => nombreLower.includes(kw) || carpetaLower.includes(kw));
-      });
-      preAnalisis[norma] = {
-        encontrados: encontrados.map(a => a.nombre),
-        count: encontrados.length,
-        carpetas: [...new Set(encontrados.map(a => a.carpeta))]
-      };
+function preAnalisisFromInventario(inventario) {
+  const archivos = inventario.archivos || [];
+  const REQUISITOS = normative.keywords;
+  const out = {};
+  Object.entries(REQUISITOS).forEach(([norma, keywords]) => {
+    const encontrados = archivos.filter((archivo) => {
+      const nombreLower = String(archivo.nombre || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      const carpetaLower = String(archivo.carpeta || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      return keywords.some((kw) => nombreLower.includes(kw) || carpetaLower.includes(kw));
     });
+    out[norma] = {
+      encontrados: encontrados.map((a) => a.nombre),
+      count: encontrados.length,
+      carpetas: [...new Set(encontrados.map((a) => a.carpeta))],
+    };
+  });
+  return out;
+}
 
-    // ── Construir el prompt ──
-    const listaArchivos = inventario.archivos
-      .map(a => `  - [${a.carpeta || 'raíz'}] ${a.nombre} (${(a.extension || '').toUpperCase()}${a.size ? `, ${(a.size / 1024).toFixed(1)}KB` : ''})`)
-      .join('\n');
+function semaforoFromScore(puntaje, thresholds) {
+  const t = thresholds || normative.thresholds;
+  let nivel = 'rojo';
+  let colorHex = '#EF4444';
+  if (puntaje >= t.semaforoVerde) {
+    nivel = 'verde';
+    colorHex = '#10B981';
+  } else if (puntaje >= t.semaforoAmarillo) {
+    nivel = 'amarillo';
+    colorHex = '#F59E0B';
+  }
+  return { nivel, colorHex };
+}
 
-    const listaCarpetas = (inventario.subcarpetas || []).join(', ');
+async function handleGetBlockInventory(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Método no permitido. Usa POST.' });
+    return;
+  }
+  if (!checkRateLimit(req, res)) return;
+  if (bodyTooLarge(req)) {
+    res.status(413).json({ error: 'Cuerpo de solicitud demasiado grande.' });
+    return;
+  }
 
-    const prompt = `
+  const ctx = await verifyBearerAnyUser(req);
+  if (ctx.error) {
+    res.status(ctx.status).json({ error: ctx.error });
+    return;
+  }
+
+  const body = req.body || {};
+  const blockId = body.blockId;
+  const sede = body.sede || 'pamplona';
+  const blockName = body.blockName || blockId;
+
+  if (!blockId || typeof blockId !== 'string' || blockId.length > 120) {
+    res.status(400).json({ error: 'blockId inválido' });
+    return;
+  }
+
+  logStructured('getBlockInventory_start', { blockId, uid: ctx.uid, isAdmin: ctx.isAdmin });
+
+  try {
+    const inventario = await buildInventoryForBlock(blockId, blockName, sede);
+    if (ctx.isAdmin) {
+      const doc = {
+        ...inventario,
+        indexedAt: admin.firestore.FieldValue.serverTimestamp(),
+        indexedByUid: ctx.uid,
+      };
+      await admin.firestore().collection(COL_INV).doc(blockId).set(doc, { merge: true });
+    }
+    logStructured('getBlockInventory_ok', { blockId, total: inventario.totalArchivos });
+    res.status(200).json({ inventario });
+  } catch (e) {
+    logStructured('getBlockInventory_err', { message: e.message, stack: e.stack });
+    res.status(500).json({ error: 'Error indexando almacenamiento', detail: e.message });
+  }
+}
+
+async function handleGetNormativeAudit(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Método no permitido. Usa POST.' });
+    return;
+  }
+  if (!checkRateLimit(req, res)) return;
+  if (bodyTooLarge(req)) {
+    res.status(413).json({ error: 'Cuerpo de solicitud demasiado grande.' });
+    return;
+  }
+
+  const ctx = await verifyBearerAndAdmin(req);
+  if (ctx.error) {
+    res.status(ctx.status).json({ error: ctx.error });
+    return;
+  }
+
+  const { inventario } = req.body || {};
+  if (!inventario || !Array.isArray(inventario.archivos) || !inventario.blockId) {
+    res.status(400).json({
+      error: 'Body inválido. Se requiere { inventario: { blockId, archivos[] } }',
+    });
+    return;
+  }
+
+  const fp = computeInventoryFingerprint(inventario);
+  if (inventario.archivoHash && inventario.archivoHash !== fp) {
+    logStructured('audit_hash_mismatch', { blockId: inventario.blockId, fp, stored: inventario.archivoHash });
+  }
+
+  const apiKey = GEMINI_API_KEY.value();
+  if (!apiKey) {
+    res.status(500).json({ error: 'GEMINI_API_KEY no configurada en Firebase Secrets.' });
+    return;
+  }
+
+  const preAnalisis = preAnalisisFromInventario(inventario);
+
+  const listaArchivos = inventario.archivos
+    .map(
+      (a) =>
+        `  - [${a.carpeta || 'raíz'}] ${a.nombre} (${(a.extension || '').toUpperCase()}${
+          a.size ? `, ${(a.size / 1024).toFixed(1)}KB` : ''
+        })`
+    )
+    .join('\n');
+
+  const listaCarpetas = (inventario.subcarpetas || []).join(', ');
+  const th = normative.thresholds;
+
+  const prompt = `
 Actúa como un INTERVENTOR TÉCNICO SENIOR DE PROYECTOS ISER (Instituto Superior de Educación Rural) en Colombia.
 
 Tu tarea es realizar una AUDITORÍA DOCUMENTAL del bloque "${inventario.blockId}" ubicado en la sede "${inventario.sede || 'pamplona'}".
@@ -125,9 +179,14 @@ ${listaArchivos || 'Sin archivos registrados.'}
 CARPETAS DETECTADAS: ${listaCarpetas || 'Ninguna'}
 
 PRE-ANÁLISIS DE COINCIDENCIAS:
-${Object.entries(preAnalisis).map(([norma, data]) =>
-  `- ${norma}: ${data.count} archivo(s) potencialmente relacionados${data.count > 0 ? ': ' + data.encontrados.slice(0, 5).join(', ') : ''}`
-).join('\n')}
+${Object.entries(preAnalisis)
+  .map(
+    ([norma, data]) =>
+      `- ${norma}: ${data.count} archivo(s) potencialmente relacionados${
+        data.count > 0 ? ': ' + data.encontrados.slice(0, 5).join(', ') : ''
+      }`
+  )
+  .join('\n')}
 
 INSTRUCCIONES DE AUDITORÍA:
 Compara este inventario contra los REQUISITOS MÍNIMOS de cada normativa colombiana:
@@ -173,95 +232,80 @@ FORMATO DE RESPUESTA OBLIGATORIO (JSON puro, sin markdown):
   ]
 }
 
-IMPORTANTE: Responde SOLO con el JSON. Sin texto adicional, sin bloques de código markdown.
+IMPORTANTE: Responde SOLO con el JSON válido RFC 8259. Sin texto adicional, sin bloques de código markdown, sin comentarios.
 `;
 
-    // ── Llamada a Gemini AI (Patrón Singleton) ──
-    if (!genAIInstance) {
-      genAIInstance = new GoogleGenerativeAI(apiKey);
-    }
-    const genAI = genAIInstance;
-    const models = ['gemini-2.5-flash', 'gemini-1.5-flash-latest'];
-    let lastError = null;
-
-    for (const modelName of models) {
-      try {
-        const model = genAI.getGenerativeModel(
-          { model: modelName },
-          { apiVersion: 'v1' }
-        );
-        const result = await model.generateContent(prompt);
-        const rawText = result.response.text().trim();
-
-        // Parsear JSON (manejar posible wrapper markdown)
-        let jsonStr = rawText;
-        const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (jsonMatch) jsonStr = jsonMatch[1].trim();
-
-        try {
-          const parsed = JSON.parse(jsonStr);
-
-          // Determinar semáforo
-          const puntaje = parsed.puntaje_global || 0;
-          let nivel = 'rojo';
-          let colorHex = '#EF4444';
-          if (puntaje >= 85) { nivel = 'verde'; colorHex = '#10B981'; }
-          else if (puntaje >= 60) { nivel = 'amarillo'; colorHex = '#F59E0B'; }
-
-          res.status(200).json({
-            ...parsed,
-            nivel,
-            colorHex,
-            inventario_resumen: {
-              totalArchivos: inventario.totalArchivos,
-              totalCarpetas: (inventario.subcarpetas || []).length,
-              blockId: inventario.blockId
-            },
-            timestamp: new Date().toISOString()
-          });
-          return;
-
-        } catch (parseErr) {
-          // Fallback si no se pudo parsear el JSON
-          res.status(200).json({
-            resumen_ejecutivo: rawText.substring(0, 500),
-            normas: {},
-            puntaje_global: 0,
-            nivel: 'rojo',
-            colorHex: '#EF4444',
-            tareas_pendientes: [{ prioridad: 'CRITICA', descripcion: 'Error en el análisis. Reintentar auditoría.' }],
-            inventario_resumen: {
-              totalArchivos: inventario.totalArchivos,
-              totalCarpetas: (inventario.subcarpetas || []).length,
-              blockId: inventario.blockId
-            },
-            timestamp: new Date().toISOString(),
-            _parseError: true
-          });
-          return;
-        }
-
-      } catch (modelErr) {
-        console.warn(`Modelo ${modelName} falló:`, modelErr.message);
-        lastError = modelErr;
-      }
-    }
-
-    // Si todos los modelos fallaron (Fallback de Resiliencia)
-    console.error('Todos los modelos de IA fallaron:', lastError?.message);
-    res.status(200).json({
-      resumen_ejecutivo: "⚠️ **Módulo en Mantenimiento IA:** El motor de auditoría inteligente no está disponible temporalmente (Alta demanda o límite de cuota). El resto del Dashboard funciona correctamente.",
-      normas: {},
-      puntaje_global: 0,
-      nivel: 'mantenimiento',
-      colorHex: '#64748B', // Gris para indicar inactividad
-      tareas_pendientes: [{ prioridad: 'MEDIA', descripcion: 'Sistema de IA temporalmente inactivo. Validar documentación manualmente u oprima "Refrescar" más tarde.' }],
-      inventario_resumen: {
-        totalArchivos: inventario.totalArchivos,
-        totalCarpetas: (inventario.subcarpetas || []).length,
-        blockId: inventario.blockId
-      },
-      timestamp: new Date().toISOString()
-    });
+  if (!genAIInstance) {
+    genAIInstance = new GoogleGenerativeAI(apiKey);
   }
+  const genAI = genAIInstance;
+  const models = ['gemini-2.5-flash', 'gemini-1.5-flash-latest'];
+  let lastError = null;
+
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName }, { apiVersion: 'v1' });
+      const result = await model.generateContent(prompt);
+      const rawText = result.response.text().trim();
+
+      let jsonStr = rawText;
+      const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) jsonStr = jsonMatch[1].trim();
+
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch (parseErr) {
+        logStructured('audit_parse_fail', { blockId: inventario.blockId, sample: rawText.substring(0, 200) });
+        res.status(502).json({
+          error: 'La respuesta del modelo no es JSON válido',
+          detail: parseErr.message,
+          rawPreview: rawText.substring(0, 400),
+        });
+        return;
+      }
+
+      const puntaje = Number(parsed.puntaje_global) || 0;
+      const { nivel, colorHex } = semaforoFromScore(puntaje, th);
+
+      res.status(200).json({
+        ...parsed,
+        nivel,
+        colorHex,
+        inventario_resumen: {
+          totalArchivos: inventario.totalArchivos,
+          totalCarpetas: (inventario.subcarpetas || []).length,
+          blockId: inventario.blockId,
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    } catch (modelErr) {
+      console.warn(`Modelo ${modelName} falló:`, modelErr.message);
+      lastError = modelErr;
+    }
+  }
+
+  logStructured('audit_models_failed', { message: lastError?.message });
+  res.status(503).json({
+    error: 'Servicio de IA no disponible temporalmente',
+    detail: lastError?.message || 'unknown',
+  });
+}
+
+const fnOpts = {
+  cors: true,
+  region: 'us-central1',
+  memory: '512MiB',
+  timeoutSeconds: 120,
+};
+
+exports.getBlockInventory = onRequest(fnOpts, handleGetBlockInventory);
+
+exports.getNormativeAudit = onRequest(
+  {
+    ...fnOpts,
+    secrets: [GEMINI_API_KEY],
+  },
+  handleGetNormativeAudit
 );
