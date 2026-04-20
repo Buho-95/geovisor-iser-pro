@@ -1,9 +1,19 @@
 /**
- * Peticiones autenticadas a Cloud Functions (Hosting rewrite /api/*).
+ * Peticiones autenticadas a Cloud Functions (URL directa, sin depender de Hosting rewrites).
  */
 import { auth } from './firebase.js';
 import { Logger } from '../core/logger.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+
+const FUNCTIONS_BASE_URL = 'https://us-central1-geovisor-iser.cloudfunctions.net';
+
+function resolveApiUrl(url) {
+  if (typeof url !== 'string') return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url === '/api/getBlockInventory') return `${FUNCTIONS_BASE_URL}/getBlockInventory`;
+  if (url === '/api/getNormativeAudit') return `${FUNCTIONS_BASE_URL}/getNormativeAudit`;
+  return url;
+}
 
 async function waitForAuthReady(timeoutMs = 12000) {
   if (auth.currentUser) return auth.currentUser;
@@ -22,6 +32,7 @@ async function waitForAuthReady(timeoutMs = 12000) {
 }
 
 async function fetchWithIdToken(url, options, requireNonAnonymous) {
+  const finalUrl = resolveApiUrl(url);
   const user = await waitForAuthReady();
   if (!user) {
     throw new Error('Se requiere sesión');
@@ -38,10 +49,11 @@ async function fetchWithIdToken(url, options, requireNonAnonymous) {
     ...options.headers,
   };
 
-  console.log('API CALL WITH AUTH', url);
-  let res = await fetch(url, { ...options, headers });
+  console.log('API URL:', finalUrl);
+  console.log('API CALL WITH AUTH', finalUrl);
+  let res = await fetch(finalUrl, { ...options, headers });
   if (res.status === 401) {
-    Logger.warn(`401 en ${url}, refrescando token y reintentando`);
+    Logger.warn(`401 en ${finalUrl}, refrescando token y reintentando`);
     token = await user.getIdToken(true);
     console.log('TOKEN READY', token?.slice?.(0, 20) || 'token-refreshed');
     headers = {
@@ -49,8 +61,8 @@ async function fetchWithIdToken(url, options, requireNonAnonymous) {
       Authorization: `Bearer ${token}`,
       ...options.headers,
     };
-    console.log('API CALL WITH AUTH', `${url} (retry)`);
-    res = await fetch(url, { ...options, headers });
+    console.log('API CALL WITH AUTH', `${finalUrl} (retry)`);
+    res = await fetch(finalUrl, { ...options, headers });
   }
 
   if (!res.ok) {
@@ -59,7 +71,7 @@ async function fetchWithIdToken(url, options, requireNonAnonymous) {
       const j = await res.json();
       detail = j.error || j.detail || detail;
     } catch (_) { /* noop */ }
-    Logger.warn(`API ${url} → ${res.status}`, detail);
+    Logger.warn(`API ${finalUrl} → ${res.status}`, detail);
     throw new Error(detail || `Error HTTP ${res.status}`);
   }
   return res;

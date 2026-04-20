@@ -22,7 +22,7 @@ import { Logger } from '../core/logger.js';
 import { computeInventoryFingerprint } from '../core/inventoryHash.js';
 import { authenticatedFetchAny } from './api.js';
 
-const INVENTORY_FUNCTION_URL = '/api/getBlockInventory';
+const INVENTORY_FUNCTION_URL = 'https://us-central1-geovisor-iser.cloudfunctions.net/getBlockInventory';
 let inventoryListenersInitialized = false;
 let offBlockSelected = null;
 let offAuthChanged = null;

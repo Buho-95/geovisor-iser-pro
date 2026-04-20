@@ -13,7 +13,7 @@
  * - Solo admins pueden "Refrescar Auditoría" para forzar nueva consulta IA.
  *
  * CAMBIO ARQUITECTÓNICO: La llamada a Gemini AI ya NO se hace desde el frontend.
- * Se delega a /api/getNormativeAudit (Firebase Cloud Function).
+ * Se delega a Cloud Function HTTPS directa.
  * La API Key de Gemini está segura en Firebase Secret Manager.
  *
  * REGLAS DE ORO: Este módulo NO modifica ni referencia ninguna función
@@ -28,10 +28,16 @@ import { isAdmin } from './services/auth.js';
 import { authenticatedFetch, authenticatedFetchAny } from './services/api.js';
 import { computeInventoryFingerprint } from './core/inventoryHash.js';
 import { setTextContent, escapeHtml } from './core/safe-dom.js';
-import normative from '../shared/normative-config.json' assert { type: 'json' };
+ 
+const AUDIT_THRESHOLDS = {
+  semaforoVerde: 85,
+  semaforoAmarillo: 60,
+  mapaVerde: 80,
+  mapaAmarillo: 50,
+};
 
-const AUDIT_FUNCTION_URL = '/api/getNormativeAudit';
-const INVENTORY_FUNCTION_URL = '/api/getBlockInventory';
+const AUDIT_FUNCTION_URL = 'https://us-central1-geovisor-iser.cloudfunctions.net/getNormativeAudit';
+const INVENTORY_FUNCTION_URL = 'https://us-central1-geovisor-iser.cloudfunctions.net/getBlockInventory';
 
 const REQUISITOS_NORMATIVOS = {
   'NSR-10': {
@@ -97,7 +103,7 @@ async function aplicarEstadoBloque(blockId, auditResult) {
   if (!state.estadosBloques[blockId]) state.estadosBloques[blockId] = {};
   
   const score = auditResult.puntaje_global || 0;
-  const th = normative.thresholds;
+  const th = AUDIT_THRESHOLDS;
   let colorSugerido = '#EF4444';
   if (score > th.mapaVerde) colorSugerido = '#10B981';
   else if (score >= th.mapaAmarillo) colorSugerido = '#F59E0B';
@@ -511,7 +517,7 @@ function renderAuditResults(data) {
     Object.entries(data.normas).forEach(([normaKey, normaData]) => {
       const config = REQUISITOS_NORMATIVOS[normaKey] || { icon: '📋', label: normaKey };
       const puntaje = normaData.puntaje || 0;
-      const th = normative.thresholds;
+      const th = AUDIT_THRESHOLDS;
       let barColor = '#EF4444';
       if (puntaje >= th.semaforoVerde) barColor = '#10B981';
       else if (puntaje >= th.semaforoAmarillo) barColor = '#F59E0B';
