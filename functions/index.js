@@ -19,8 +19,10 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { getNormativeConfig } = require('./configService');
 const { buildInventoryForBlock } = require('./storageInventory');
 const { computeInventoryFingerprint } = require('./inventoryHash');
+const { redactInventarioForAnonymous } = require('./inventorySanitize');
 const {
   checkRateLimit,
+  checkRateLimitUid,
   bodyTooLarge,
   verifyBearerAndAdmin,
   verifyBearerAnyUser,
@@ -89,6 +91,7 @@ async function handleGetBlockInventory(req, res) {
     res.status(ctx.status).json({ error: ctx.error });
     return;
   }
+  if (!checkRateLimitUid(req, res, ctx.uid)) return;
 
   const body = req.body || {};
   const blockId = body.blockId;
@@ -112,8 +115,14 @@ async function handleGetBlockInventory(req, res) {
       };
       await admin.firestore().collection(COL_INV).doc(blockId).set(doc, { merge: true });
     }
-    logStructured('getBlockInventory_ok', { blockId, total: inventario.totalArchivos });
-    res.status(200).json({ inventario });
+    const payloadInventario =
+      ctx.isAnonymous ? redactInventarioForAnonymous(inventario) : inventario;
+    logStructured('getBlockInventory_ok', {
+      blockId,
+      total: inventario.totalArchivos,
+      anon: !!ctx.isAnonymous,
+    });
+    res.status(200).json({ inventario: payloadInventario });
   } catch (e) {
     logStructured('getBlockInventory_err', { message: e.message, stack: e.stack });
     res.status(500).json({ error: 'Error indexando almacenamiento', detail: e.message });
@@ -136,6 +145,7 @@ async function handleGetNormativeAudit(req, res) {
     res.status(ctx.status).json({ error: ctx.error });
     return;
   }
+  if (!checkRateLimitUid(req, res, ctx.uid)) return;
 
   const { inventario } = req.body || {};
   if (!inventario || !Array.isArray(inventario.archivos) || !inventario.blockId) {
@@ -295,7 +305,10 @@ IMPORTANTE: Responde SOLO con el JSON válido RFC 8259. Sin texto adicional, sin
       });
       return;
     } catch (modelErr) {
-      console.warn(`Modelo ${modelName} falló:`, modelErr.message);
+      logStructured('audit_model_attempt_failed', {
+        model: modelName,
+        message: String(modelErr.message || modelErr).slice(0, 300),
+      });
       lastError = modelErr;
     }
   }

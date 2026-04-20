@@ -20,9 +20,9 @@ import { COLLECTIONS, STORAGE_PATHS } from '../core/config.js';
 import { on, EVENTS } from '../core/events.js';
 import { Logger } from '../core/logger.js';
 import { computeInventoryFingerprint } from '../core/inventoryHash.js';
-import { authenticatedFetchAny } from './api.js';
+import { authenticatedFetchAny, API_ENDPOINTS } from './api.js';
 
-const INVENTORY_FUNCTION_URL = 'https://getblockinventory-arhxbhdbiq-uc.a.run.app';
+const INVENTORY_FUNCTION_URL = API_ENDPOINTS.getBlockInventory;
 let inventoryListenersInitialized = false;
 let offBlockSelected = null;
 let offAuthChanged = null;

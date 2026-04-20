@@ -5,7 +5,8 @@ import { auth } from './firebase.js';
 import { Logger } from '../core/logger.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
 
-const RUN_APP_URLS = {
+/** Única fuente de URLs de Cloud Run para las Functions HTTPS. */
+export const API_ENDPOINTS = {
   getBlockInventory: 'https://getblockinventory-arhxbhdbiq-uc.a.run.app',
   getNormativeAudit: 'https://getnormativeaudit-arhxbhdbiq-uc.a.run.app',
 };
@@ -13,8 +14,8 @@ const RUN_APP_URLS = {
 function resolveApiUrl(url) {
   if (typeof url !== 'string') return url;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  if (url === '/api/getBlockInventory') return RUN_APP_URLS.getBlockInventory;
-  if (url === '/api/getNormativeAudit') return RUN_APP_URLS.getNormativeAudit;
+  if (url === '/api/getBlockInventory') return API_ENDPOINTS.getBlockInventory;
+  if (url === '/api/getNormativeAudit') return API_ENDPOINTS.getNormativeAudit;
   return url;
 }
 
@@ -45,26 +46,22 @@ async function fetchWithIdToken(url, options, requireNonAnonymous) {
   }
 
   let token = await user.getIdToken();
-  console.log('TOKEN READY', token?.slice?.(0, 20) || 'token');
+  Logger.debug('API autenticada', { url: finalUrl });
   let headers = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
     ...options.headers,
   };
 
-  console.log('API URL:', finalUrl);
-  console.log('API CALL WITH AUTH', finalUrl);
   let res = await fetch(finalUrl, { ...options, headers });
   if (res.status === 401) {
     Logger.warn(`401 en ${finalUrl}, refrescando token y reintentando`);
     token = await user.getIdToken(true);
-    console.log('TOKEN READY', token?.slice?.(0, 20) || 'token-refreshed');
     headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
       ...options.headers,
     };
-    console.log('API CALL WITH AUTH', `${finalUrl} (retry)`);
     res = await fetch(finalUrl, { ...options, headers });
   }
 

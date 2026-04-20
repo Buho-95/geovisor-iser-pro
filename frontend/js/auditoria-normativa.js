@@ -25,19 +25,10 @@ import { getCampusData } from './campus-data.js';
 import { Logger } from './core/logger.js';
 import { getAuditoriaCached, guardarAuditoria, guardarEstadoBloque } from './services/firestore.js';
 import { isAdmin } from './services/auth.js';
-import { authenticatedFetch, authenticatedFetchAny } from './services/api.js';
+import { authenticatedFetch, authenticatedFetchAny, API_ENDPOINTS } from './services/api.js';
 import { computeInventoryFingerprint } from './core/inventoryHash.js';
 import { setTextContent, escapeHtml } from './core/safe-dom.js';
- 
-const AUDIT_THRESHOLDS = {
-  semaforoVerde: 85,
-  semaforoAmarillo: 60,
-  mapaVerde: 80,
-  mapaAmarillo: 50,
-};
-
-const AUDIT_FUNCTION_URL = 'https://getnormativeaudit-arhxbhdbiq-uc.a.run.app';
-const INVENTORY_FUNCTION_URL = 'https://getblockinventory-arhxbhdbiq-uc.a.run.app';
+import { ensureNormativeConfig, getNormativeConfigCached } from './core/normative-config-client.js';
 
 const REQUISITOS_NORMATIVOS = {
   'NSR-10': {
@@ -69,9 +60,9 @@ async function escanearArchivosBloque(blockId) {
   const blockName = campusInfo[blockId]?.name || blockId;
   const sede = state.currentSede || 'pamplona';
 
-  Logger.info(`🔐 Solicitando inventario al backend: ${INVENTORY_FUNCTION_URL}`);
+  Logger.info(`🔐 Solicitando inventario al backend: ${API_ENDPOINTS.getBlockInventory}`);
 
-  const response = await authenticatedFetchAny(INVENTORY_FUNCTION_URL, {
+  const response = await authenticatedFetchAny(API_ENDPOINTS.getBlockInventory, {
     method: 'POST',
     body: JSON.stringify({ blockId, blockName, sede }),
   });
@@ -86,9 +77,9 @@ async function escanearArchivosBloque(blockId) {
 }
 
 async function auditoriaDocumentalIA(inventario) {
-  Logger.info(`🔐 Enviando inventario a Cloud Function: ${AUDIT_FUNCTION_URL}`);
+  Logger.info(`🔐 Enviando inventario a Cloud Function: ${API_ENDPOINTS.getNormativeAudit}`);
 
-  const response = await authenticatedFetch(AUDIT_FUNCTION_URL, {
+  const response = await authenticatedFetch(API_ENDPOINTS.getNormativeAudit, {
     method: 'POST',
     body: JSON.stringify({ inventario }),
   });
@@ -99,11 +90,12 @@ async function auditoriaDocumentalIA(inventario) {
  * Aplica los datos de auditoría al estado global del bloque y actualiza el mapa.
  */
 async function aplicarEstadoBloque(blockId, auditResult) {
+  await ensureNormativeConfig();
+  const th = getNormativeConfigCached().thresholds;
   if (!state.estadosBloques) state.estadosBloques = {};
   if (!state.estadosBloques[blockId]) state.estadosBloques[blockId] = {};
   
   const score = auditResult.puntaje_global || 0;
-  const th = AUDIT_THRESHOLDS;
   let colorSugerido = '#EF4444';
   if (score > th.mapaVerde) colorSugerido = '#10B981';
   else if (score >= th.mapaAmarillo) colorSugerido = '#F59E0B';
@@ -517,7 +509,7 @@ function renderAuditResults(data) {
     Object.entries(data.normas).forEach(([normaKey, normaData]) => {
       const config = REQUISITOS_NORMATIVOS[normaKey] || { icon: '📋', label: normaKey };
       const puntaje = normaData.puntaje || 0;
-      const th = AUDIT_THRESHOLDS;
+      const th = getNormativeConfigCached().thresholds;
       let barColor = '#EF4444';
       if (puntaje >= th.semaforoVerde) barColor = '#10B981';
       else if (puntaje >= th.semaforoAmarillo) barColor = '#F59E0B';
@@ -627,7 +619,6 @@ function renderErrorState(container, message) {
  * Called from bootstrap.js via lazy loading.
  */
 export function initAuditoriaNormativa() {
-  // Wait for the dashboard to render its shell first
   const tryMount = () => {
     const mountPoint = document.getElementById('panel-auditoria-normativa');
     if (mountPoint) {
@@ -636,12 +627,9 @@ export function initAuditoriaNormativa() {
     }
   };
 
-  // Try immediately
-  tryMount();
+  void ensureNormativeConfig().then(() => tryMount());
 
-  // Also re-mount when dashboard re-renders (Firestore sync rebuilds the shell)
   on(EVENTS.FIRESTORE_SYNC, () => {
-    // Small delay to let dashboard.js rebuild its shell first
-    setTimeout(tryMount, 200);
+    setTimeout(() => void ensureNormativeConfig().then(() => tryMount()), 200);
   });
 }

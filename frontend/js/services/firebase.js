@@ -1,14 +1,8 @@
 /**
  * Servicio Firebase: inicialización de Auth, Firestore, Storage y App Check.
  *
- * NOTA TÉCNICA: En ES Modules, los `import` se izan (hoisting) antes de que
- * cualquier código del archivo se ejecute. Por eso `self.FIREBASE_APPCHECK_DEBUG_TOKEN`
- * debe configurarse desde un <script> clásico en el HTML, ANTES de cargar este módulo.
- *
- * El HTML ya incluye (o debe incluir) lo siguiente ANTES del <script type="module">:
- *   <script>self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;</script>
- *
- * Este archivo simplemente consume ese valor sin condiciones.
+ * Debug token de App Check: solo en localhost (desarrollo). En producción se usa
+ * reCAPTCHA v3 sin token de depuración.
  */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -25,7 +19,14 @@ const app = initializeApp(firebaseConfig);
 // Cuando debug token está activo, Firebase ignora la clave de sitio.
 // Obtenla en: https://www.google.com/recaptcha/admin
 const RECAPTCHA_SITE_KEY = '6LdYAJMsAAAAAPhabJ2yXRSq_M-3WxfCiYJcypUe';
-self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+
+const host = typeof location !== 'undefined' ? location.hostname : '';
+const isLocalDev =
+  host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+if (isLocalDev) {
+  self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  Logger.info('App Check: modo debug (localhost). En producción se usa reCAPTCHA sin token de depuración.');
+}
 
 let appCheckInstance = null;
 try {

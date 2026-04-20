@@ -190,7 +190,9 @@ export function initAuth(callbacks = {}) {
         const fallbackAdmin = TEMP_ADMIN_EMAILS.includes(email);
         state.userRole = state.userProfile?.role === 'admin' || fallbackAdmin ? 'admin' : 'viewer';
         if (!snap.exists() && fallbackAdmin) {
-          Logger.warn('RBAC fallback activo: admin temporal por email (crear usuarios_iser.role=admin).');
+          Logger.warn(
+            'RBAC fallback: admin por lista temporal de email. Migrar a usuarios_iser.role=admin o custom claims (admin: true).'
+          );
         }
       } catch (err) {
         Logger.warn('No se pudo leer usuarios_iser:', err);

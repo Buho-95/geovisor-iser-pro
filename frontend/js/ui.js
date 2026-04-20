@@ -7,6 +7,7 @@ import { Logger } from './core/logger.js';
 import { getCampusData } from './campus-data.js';
 import { generarMenuPlanoteca } from './planoteca-structure.js';
 import { getPathsForFilter, getFirstFileInPath, getFilesInPath, normalizeKey } from './services/fileMapper.js';
+import { escapeHtml } from './core/safe-dom.js';
 
 import { storage } from './services/firebase.js';
 import { ref as storageRef, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
@@ -151,8 +152,8 @@ function renderBlockPreviewMessage(container, title, detail) {
   const el = getMiniVisorContentEl(container);
   el.innerHTML = `
     <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;text-align:center;">
-      <div style="font-weight:600;color:var(--text-secondary);">${title || ''}</div>
-      ${detail ? `<div style="font-size:0.82rem;color:var(--text-muted);margin-top:4px;">${detail}</div>` : ''}
+      <div style="font-weight:600;color:var(--text-secondary);">${escapeHtml(title || '')}</div>
+      ${detail ? `<div style="font-size:0.82rem;color:var(--text-muted);margin-top:4px;">${escapeHtml(detail)}</div>` : ''}
     </div>
   `.trim();
 }
@@ -784,7 +785,7 @@ class DocPreviewModal {
             const dlBtnHtml = state.userRole === 'admin' ? '<button type="button" class="btn btn-outline-primary" data-doc-download-now>Descargar archivo</button>' : '';
             this.bodyEl.innerHTML = `
               <div data-doc-preview-root class="w-100 h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center">
-                <div class="text-secondary mb-2">${msg}</div>
+                <div class="text-secondary mb-2">${escapeHtml(msg)}</div>
                 ${dlBtnHtml}
               </div>
             `.trim();
@@ -1014,7 +1015,7 @@ export function initGlobalView(onBlockSelect) {
   for (const [id, data] of Object.entries(campusData)) {
     if (data.coords && data.coords.length > 0) {
       const li = document.createElement('li');
-      li.innerHTML = `<div class="dot" style="background-color: ${data.color}"></div><span class="name">${data.name}</span>`;
+      li.innerHTML = `<div class="dot" style="background-color: ${data.color}"></div><span class="name">${escapeHtml(data.name)}</span>`;
       li.onclick = () => onBlockSelect(id);
       list.appendChild(li);
     }
@@ -1028,7 +1029,7 @@ function construirArbolHTML(estructura, rutaActual) {
   for (const [nombre, subEstructura] of Object.entries(estructura)) {
     if (nombre === '_archivos') continue;
     tieneContenido = true;
-    html += `<li class="mt-1"><details class="group"><summary class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded-md cursor-pointer text-slate-700 text-sm font-semibold transition-colors"><i class="ph-bold ph-caret-right text-xs text-slate-400 group-open:rotate-90 transition-transform duration-200"></i><i class="ph-fill ph-folder text-lg text-blue-500 group-open:text-blue-600"></i><span>${nombre}</span></summary>`;
+    html += `<li class="mt-1"><details class="group"><summary class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded-md cursor-pointer text-slate-700 text-sm font-semibold transition-colors"><i class="ph-bold ph-caret-right text-xs text-slate-400 group-open:rotate-90 transition-transform duration-200"></i><i class="ph-fill ph-folder text-lg text-blue-500 group-open:text-blue-600"></i><span>${escapeHtml(nombre)}</span></summary>`;
     html += construirArbolHTML(subEstructura, rutaActual + "/" + nombre);
     html += `</details></li>`;
   }
@@ -1046,7 +1047,7 @@ function construirArbolHTML(estructura, rutaActual) {
       else if (file.tipo === 'excel') { icono = "ph-file-xls text-emerald-600"; tColor = "text-emerald-800"; }
       else if (file.tipo === 'img') { icono = "ph-image text-purple-500"; tColor = "text-purple-700"; }
       const fileJson = encodeURIComponent(JSON.stringify(file));
-      html += `<li><div data-open-viewer="${fileJson}" class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-100 rounded-md cursor-pointer ${tColor} text-sm group border border-transparent hover:border-slate-200 shadow-sm bg-white"><i class="ph-fill ${icono} text-xl opacity-90 group-hover:scale-110 transition-transform"></i><span class="font-medium truncate">${file.nombre}</span></div></li>`;
+      html += `<li><div data-open-viewer="${fileJson}" class="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-100 rounded-md cursor-pointer ${tColor} text-sm group border border-transparent hover:border-slate-200 shadow-sm bg-white"><i class="ph-fill ${icono} text-xl opacity-90 group-hover:scale-110 transition-transform"></i><span class="font-medium truncate">${escapeHtml(file.nombre)}</span></div></li>`;
     });
   }
   if (!tieneContenido) html += `<li><div class="px-2 py-1 text-xs text-slate-400 italic flex items-center gap-1"><i class="ph ph-folder-dashed"></i> Carpeta vacía</div></li>`;
@@ -1076,10 +1077,10 @@ function crearArchivoItem(archivo) {
       <div data-open-viewer="${fileJson}" class="flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors group" style="background:var(--glass-bg); border:1px solid transparent;" onmouseover="this.style.borderColor='var(--border-active)'; this.style.background='var(--surface-active)';" onmouseout="this.style.borderColor='transparent'; this.style.background='var(--glass-bg)';">
         <div class="flex items-center gap-2 min-w-0 flex-1">
           <i class="ph-fill ${icono}" style="color:var(--${color === 'amber' ? 'amber' : color === 'red' ? 'pink' : color === 'emerald' ? 'green' : 'cyan'}); font-size:1.2rem;"></i>
-          <span class="text-sm font-medium truncate" style="color:var(--text-primary);">${archivo.nombre}</span>
+          <span class="text-sm font-medium truncate" style="color:var(--text-primary);">${escapeHtml(archivo.nombre)}</span>
         </div>
         <div class="flex items-center gap-3 text-xs" style="color:var(--text-muted);">
-          <span>${tamaño}</span>
+          <span>${escapeHtml(tamaño)}</span>
           ${state.userRole === 'admin' ? `<button data-doc-download="${fileJson}" class="btn-visor-action" style="padding:4px; font-size:0.9rem; background:none; border:none; color:var(--text-secondary); cursor:pointer;" title="Descargar" onmouseover="this.style.color='var(--cyan)';" onmouseout="this.style.color='var(--text-secondary)';">
              <i class="ph ph-cloud-arrow-down"></i>
           </button>` : ''}
@@ -1149,7 +1150,7 @@ export function generarArbolDirectorios(archivos, containerEl) {
         <details>
           <summary class="flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors outline-none" style="background:var(--midnight-mid); border: 1px solid var(--border-subtle); color:var(--text-primary);">
             <i class="ph-fill ph-folder" style="color:var(--cyan);"></i>
-            <span class="font-medium" style="font-size:0.85rem;">${carpeta}</span>
+            <span class="font-medium" style="font-size:0.85rem;">${escapeHtml(carpeta)}</span>
             <span class="text-xs px-2 py-1 rounded-full" style="background:var(--cyan-dim); color:var(--cyan); margin-left:auto;">${archivosCarpeta.length}</span>
           </summary>
           <ul class="ml-4 mt-2 space-y-1 mb-2 pl-2" style="border-left: 1px solid var(--border-subtle);">
@@ -1217,23 +1218,27 @@ function crearArchivoCard(archivo) {
   });
   const tamaño = formatFileSize(archivo.tamaño || 0);
 
+  const safeId = escapeHtml(String(archivo.id ?? ''));
+  const safeTipo = escapeHtml(String(archivo.tipo ?? ''));
+  const safeNombre = escapeHtml(archivo.nombre);
+  const urlJs = JSON.stringify(archivo.url || '');
   return `
-    <div class="file-card" data-file-id="${archivo.id}" data-file-type="${archivo.tipo}">
+    <div class="file-card" data-file-id="${safeId}" data-file-type="${safeTipo}">
       <div class="file-card-header">
         <div class="file-card-icon ${color}">
           <i class="ph ${icono}"></i>
         </div>
-        <div class="file-card-title" title="${archivo.nombre}">${archivo.nombre}</div>
+        <div class="file-card-title" title="${safeNombre}">${safeNombre}</div>
       </div>
       <div class="file-card-meta">
-        <span>${fechaFormateada}</span>
-        <span>${tamaño}</span>
+        <span>${escapeHtml(fechaFormateada)}</span>
+        <span>${escapeHtml(tamaño)}</span>
       </div>
       <div class="file-card-actions">
         <button class="file-action-btn" title="Ver archivo" data-open-viewer='${encodeURIComponent(JSON.stringify(archivo))}'>
           <i class="ph ph-eye"></i>
         </button>
-        ${state.userRole === 'admin' ? `<button class="file-action-btn" title="Descargar" onclick="window.open('${archivo.url}', '_blank')">
+        ${state.userRole === 'admin' ? `<button class="file-action-btn" title="Descargar" onclick="window.open(${urlJs}, '_blank')">
           <i class="ph ph-download"></i>
         </button>` : ''}
       </div>
@@ -1304,7 +1309,7 @@ function setupSearchAndFilters(archivos) {
     const filteredFiles = archivos.filter(archivo => {
       const matchesSearch = !searchTerm ||
         archivo.nombre.toLowerCase().includes(searchTerm) ||
-        archivo.carpeta.toLowerCase().includes(searchTerm);
+        (archivo.carpeta || '').toLowerCase().includes(searchTerm);
 
       const matchesFilter = currentFilter === 'all' || archivo.tipo === currentFilter;
 
@@ -1359,7 +1364,7 @@ function setupSearchAndFilters(archivos) {
           <details open>
             <summary class="flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
               <i class="ph ph-folder text-amber-500"></i>
-              <span class="font-medium text-slate-700">${carpeta}</span>
+              <span class="font-medium text-slate-700">${escapeHtml(carpeta)}</span>
               <span class="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full">${archivosCarpeta.length}</span>
             </summary>
             <ul class="ml-4 mt-1 space-y-1">
