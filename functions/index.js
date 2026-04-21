@@ -20,6 +20,7 @@ const { getNormativeConfig } = require('./configService');
 const { buildInventoryForBlock } = require('./storageInventory');
 const { computeInventoryFingerprint } = require('./inventoryHash');
 const { redactInventarioForAnonymous } = require('./inventorySanitize');
+const { envFromRequest, withCollection } = require('./envNamespace');
 const {
   checkRateLimit,
   checkRateLimitUid,
@@ -33,7 +34,7 @@ const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 
 let genAIInstance = null;
 
-const COL_INV = 'inventario_bloques';
+const COL_INV_BASE = 'inventario_bloques';
 
 function preAnalisisFromInventario(inventario) {
   const normative = getNormativeConfig();
@@ -97,23 +98,26 @@ async function handleGetBlockInventory(req, res) {
   const blockId = body.blockId;
   const sede = body.sede || 'pamplona';
   const blockName = body.blockName || blockId;
+  const env = envFromRequest(req);
+  const colInv = withCollection(env, COL_INV_BASE);
 
   if (!blockId || typeof blockId !== 'string' || blockId.length > 120) {
     res.status(400).json({ error: 'blockId inválido' });
     return;
   }
 
-  logStructured('getBlockInventory_start', { blockId, uid: ctx.uid, isAdmin: ctx.isAdmin });
+  logStructured('getBlockInventory_start', { blockId, uid: ctx.uid, isAdmin: ctx.isAdmin, env });
 
   try {
-    const inventario = await buildInventoryForBlock(blockId, blockName, sede);
+    const inventario = await buildInventoryForBlock(blockId, blockName, sede, env);
     if (ctx.isAdmin) {
       const doc = {
         ...inventario,
+        env,
         indexedAt: admin.firestore.FieldValue.serverTimestamp(),
         indexedByUid: ctx.uid,
       };
-      await admin.firestore().collection(COL_INV).doc(blockId).set(doc, { merge: true });
+      await admin.firestore().collection(colInv).doc(blockId).set(doc, { merge: true });
     }
     const payloadInventario =
       ctx.isAnonymous ? redactInventarioForAnonymous(inventario) : inventario;
@@ -121,10 +125,11 @@ async function handleGetBlockInventory(req, res) {
       blockId,
       total: inventario.totalArchivos,
       anon: !!ctx.isAnonymous,
+      env,
     });
     res.status(200).json({ inventario: payloadInventario });
   } catch (e) {
-    logStructured('getBlockInventory_err', { message: e.message, stack: e.stack });
+    logStructured('getBlockInventory_err', { message: e.message, stack: e.stack, env });
     res.status(500).json({ error: 'Error indexando almacenamiento', detail: e.message });
   }
 }
@@ -148,6 +153,7 @@ async function handleGetNormativeAudit(req, res) {
   if (!checkRateLimitUid(req, res, ctx.uid)) return;
 
   const { inventario } = req.body || {};
+  const env = envFromRequest(req);
   if (!inventario || !Array.isArray(inventario.archivos) || !inventario.blockId) {
     res.status(400).json({
       error: 'Body inválido. Se requiere { inventario: { blockId, archivos[] } }',
@@ -157,7 +163,7 @@ async function handleGetNormativeAudit(req, res) {
 
   const fp = computeInventoryFingerprint(inventario);
   if (inventario.archivoHash && inventario.archivoHash !== fp) {
-    logStructured('audit_hash_mismatch', { blockId: inventario.blockId, fp, stored: inventario.archivoHash });
+    logStructured('audit_hash_mismatch', { blockId: inventario.blockId, fp, stored: inventario.archivoHash, env });
   }
 
   const apiKey = GEMINI_API_KEY.value();
@@ -296,6 +302,7 @@ IMPORTANTE: Responde SOLO con el JSON válido RFC 8259. Sin texto adicional, sin
         ...parsed,
         nivel,
         colorHex,
+        env,
         inventario_resumen: {
           totalArchivos: inventario.totalArchivos,
           totalCarpetas: (inventario.subcarpetas || []).length,

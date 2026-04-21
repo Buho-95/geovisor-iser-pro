@@ -172,13 +172,150 @@ Firebase Hosting también guarda versiones: Console → Hosting → "Release his
 
 ---
 
-## 9. Próximo paso — Staging real (pendiente)
+## 9. Staging real (namespace compartido)
 
-Este documento cubre el **entorno de desarrollo local**. El siguiente entorno a configurar es un **Staging real** con:
+### 9.1 Arquitectura
 
-- Proyecto Firebase independiente (`geovisor-iser-staging`).
-- Copia real de Firestore y Storage desde producción.
-- URL dedicada (`geovisor-iser-staging.web.app` o custom).
-- Pruebas con datos reales, auditoría IA real, carpetas reales.
+El Geovisor ISER usa **un único proyecto Firebase** (`geovisor-iser`), pero dentro de él conviven dos namespaces **totalmente aislados**:
 
-Cuando estés listo, abre un chat con: **"vamos a configurar staging real"**.
+| Recurso | Producción | Staging |
+|---------|-----------|---------|
+| Firestore | `archivos_iser`, `usuarios_iser`, `bloques_estado`, ... | `staging_archivos_iser`, `staging_usuarios_iser`, `staging_bloques_estado`, ... |
+| Storage | `documentos_iser/...`, `auditorias/...`, ... | `staging/documentos_iser/...`, `staging/auditorias/...`, ... |
+| URL | `https://geovisor-iser.web.app` | `https://geovisor-iser--staging-<hash>.web.app` |
+
+La detección del entorno es **automática por hostname** en `frontend/js/core/env.js`:
+
+- `localhost` / `127.0.0.1` → `development` (banner rojo, emuladores)
+- URL con `--staging-` → `staging` (banner naranja, namespace `staging_*` / `staging/`)
+- Dominio principal → `production` (sin banner, namespace sin prefijo)
+
+### 9.2 Helpers que garantizan el aislamiento
+
+- `frontend/js/core/paths.js` — `getCollection(name)` y `getStoragePath(path)` aplican el prefijo correspondiente.
+- `frontend/js/core/constants.js` — `COLLECTIONS` y `STORAGE_PATHS` ya son **env-aware** (apuntan al namespace correcto sin intervención).
+- `frontend/js/core/env-validate.js` — valida al arrancar que TODOS los paths son coherentes con el entorno. Si detecta fuga, emite error.
+- `functions/envNamespace.js` — mismos helpers en backend; cada llamada recibe `env` en body o header `X-Geovisor-Env`.
+- `firestore.rules` y `storage.rules` — reglas replicadas para `staging_*` y `staging/` (mismo modelo de permisos).
+
+### 9.3 Flujo staging
+
+#### Primera vez — clonar datos de producción a staging
+
+```bash
+# 1. Despliega reglas staging (solo primera vez, o cuando cambien las reglas)
+npm run staging:deploy:rules
+
+# 2. Despliega las Cloud Functions (nuevas: aceptan env="staging")
+npm run staging:deploy:functions
+
+# 3. Simula la clonación (DRY-RUN — no escribe nada)
+npm run staging:clone:dry
+
+# 4. Si el dry-run se ve bien, clona de verdad
+npm run staging:clone:apply
+
+# 5. Despliega el frontend al canal staging
+npm run staging:deploy:hosting
+```
+
+`npm run staging:deploy` ejecuta todo lo anterior EXCEPTO la clonación de datos.
+
+#### Ciclo normal de trabajo en staging
+
+```bash
+git checkout develop
+# ...haces cambios...
+git add . && git commit -m "feat: ..."
+npm run staging:deploy:hosting     # despliega solo el frontend al canal staging
+```
+
+La URL preview permanece válida 30 días desde el último deploy.
+
+### 9.4 Clonación selectiva (script)
+
+El script `scripts/clone-to-staging.js` admite flags:
+
+```bash
+# Solo Firestore
+node scripts/clone-to-staging.js --apply --only=firestore
+
+# Solo Storage
+node scripts/clone-to-staging.js --apply --only=storage
+
+# Una colección específica
+node scripts/clone-to-staging.js --apply --collections=archivos_iser,bloques_estado
+
+# Un path específico de Storage
+node scripts/clone-to-staging.js --apply --paths=documentos_iser
+```
+
+**Protecciones del script:**
+- DRY-RUN por defecto (sin `--apply` no escribe nada).
+- Aborta si el destino no empieza con `staging_` / `staging/`.
+- Cada documento migrado guarda `__clonedFrom` y `__clonedAt` para trazabilidad.
+- Producción es **solo lectura**. El script nunca escribe sobre colecciones de producción.
+
+**Requisitos previos:**
+- Credenciales Admin: `export GOOGLE_APPLICATION_CREDENTIALS=/ruta/a/service-account.json`
+  (o haber hecho `firebase login` en la máquina; en Windows es GCP Application Default Credentials).
+- `cd functions && npm install` (el script reutiliza `firebase-admin` de `functions/`).
+
+### 9.5 Forzar un entorno manualmente (solo QA)
+
+Para simular staging desde el navegador sin desplegar:
+
+```
+?env=staging                                    ← una sola sesión (URL)
+localStorage.setItem('__geovisor_env_override__','staging')  ← persistente
+```
+
+No se puede forzar `production` desde otra URL — por seguridad.
+
+### 9.6 Validación post-despliegue staging
+
+Al abrir la URL staging, comprueba en la consola del navegador:
+
+- ✅ Banner naranja arriba: `MODO STAGING (PRUEBAS REALES)`.
+- ✅ Badge naranja esquina inferior derecha: `STAGING`.
+- ✅ Mensaje en consola: `✓ Namespace isolation OK · ENV=staging`.
+- ✅ Tabla con `archivos (env): staging_archivos_iser`, `storage (env): staging/documentos_iser`.
+- ✅ Sin mensaje `⚠ Inconsistencia de namespace`.
+- ✅ En Firestore Console (Firebase), los cambios aparecen SOLO bajo colecciones `staging_*`.
+- ✅ En Storage Console, los archivos suben bajo `staging/documentos_iser/...`.
+
+### 9.7 Restricciones
+
+- ❌ NUNCA modificar datos de producción desde staging.
+- ❌ NUNCA eliminar colecciones reales (`archivos_iser`, etc.).
+- ❌ NUNCA usar rutas mixtas (escribir en `documentos_iser/` desde staging).
+- ✅ TODO staging debe vivir bajo `staging_*` (Firestore) o `staging/` (Storage).
+
+### 9.8 Mapa de archivos nuevos/modificados por Staging
+
+| Archivo | Qué hace |
+|---------|----------|
+| `frontend/js/core/env.js` | Detecta `development` / `staging` / `production` + overrides QA. |
+| `frontend/js/core/paths.js` | **Nuevo.** `getCollection()`, `getStoragePath()`, `belongsToCurrentEnv()`. |
+| `frontend/js/core/constants.js` | `COLLECTIONS`/`STORAGE_PATHS` env-aware + versiones `*_RAW`. |
+| `frontend/js/core/env-banner.js` | 3 colores (rojo/naranja/ninguno) + badge persistente. |
+| `frontend/js/core/env-validate.js` | **Nuevo.** Valida al arrancar que los paths son correctos. |
+| `frontend/js/services/api.js` | Envía `env` en body + header `X-Geovisor-Env` al backend. |
+| `functions/envNamespace.js` | **Nuevo.** Namespacing server-side. |
+| `functions/storageInventory.js` | Acepta `env` y escanea `staging/documentos_iser/...`. |
+| `functions/index.js` | `inventario_bloques` → `staging_inventario_bloques` según env. |
+| `firestore.rules` | Reglas replicadas para `staging_*`. |
+| `storage.rules` | Reglas replicadas para `staging/`. |
+| `scripts/clone-to-staging.js` | **Nuevo.** Clonación producción→staging con DRY-RUN por defecto. |
+
+---
+
+## 10. Cuándo usar qué entorno
+
+| Tarea | Entorno recomendado |
+|-------|---------------------|
+| Cambios de UI / lógica que no tocan datos | `development` (emuladores) |
+| Pruebas que requieren datos reales (auditoría IA, estructura de carpetas) | `staging` |
+| Compartir una versión de prueba con otros | `staging` (URL preview) |
+| Despliegue final validado | `production` |
+

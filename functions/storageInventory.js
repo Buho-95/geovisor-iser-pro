@@ -2,6 +2,7 @@
 
 const admin = require('firebase-admin');
 const { computeInventoryFingerprint } = require('./inventoryHash');
+const { withStoragePath } = require('./envNamespace');
 
 const STORAGE_BASE = 'documentos_iser';
 
@@ -75,21 +76,28 @@ async function scanPrefix(prefix, blockId, blockName, sede, basePathLabel) {
 
 /**
  * Intenta rutas conocidas (actual + legado) y devuelve el primer inventario no vacío.
+ * @param {string} blockId
+ * @param {string} blockName
+ * @param {string} sede
+ * @param {string} [env='production']  namespace a consultar ("staging" | "production")
  */
-async function buildInventoryForBlock(blockId, blockName, sede) {
+async function buildInventoryForBlock(blockId, blockName, sede, env) {
   const s = sede || 'pamplona';
+  const nsEnv = env || 'production';
+  const base = withStoragePath(nsEnv, STORAGE_BASE);
 
   const attempts = [
-    { prefix: `${STORAGE_BASE}/${blockId}/`, label: `${STORAGE_BASE}/${blockId}` },
-    { prefix: `${STORAGE_BASE}/${s}/${blockId}/`, label: `${STORAGE_BASE}/${s}/${blockId}` },
+    { prefix: `${base}/${blockId}/`, label: `${base}/${blockId}` },
+    { prefix: `${base}/${s}/${blockId}/`, label: `${base}/${s}/${blockId}` },
   ];
   if (blockName && blockName !== blockId) {
-    attempts.push({ prefix: `${STORAGE_BASE}/${blockName}/`, label: `${STORAGE_BASE}/${blockName}` });
+    attempts.push({ prefix: `${base}/${blockName}/`, label: `${base}/${blockName}` });
   }
 
   let lastEmpty = null;
   for (const a of attempts) {
     const inv = await scanPrefix(a.prefix, blockId, blockName || blockId, s, a.label);
+    inv.env = nsEnv;
     if (inv.totalArchivos > 0) return inv;
     lastEmpty = inv;
   }
@@ -97,7 +105,8 @@ async function buildInventoryForBlock(blockId, blockName, sede) {
     blockId,
     blockName: blockName || blockId,
     sede: s,
-    basePath: `${STORAGE_BASE}/${blockId}`,
+    env: nsEnv,
+    basePath: `${base}/${blockId}`,
     archivos: [],
     subcarpetas: [],
     totalArchivos: 0,

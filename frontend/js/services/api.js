@@ -4,8 +4,15 @@
 import { auth } from './firebase.js';
 import { Logger } from '../core/logger.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-import { shouldUseEmulators, EMULATOR_PORTS } from '../core/env.js';
+import { shouldUseEmulators, EMULATOR_PORTS, ENV_MODE, isStaging } from '../core/env.js';
 import { firebaseConfig } from '../core/config.js';
+
+/**
+ * Env enviado al backend: dev se trata como "production" namespace
+ * (backend no conoce "development"; los emuladores ya aíslan datos).
+ * Solo "staging" activa el prefijo server-side.
+ */
+export const BACKEND_ENV = isStaging ? 'staging' : 'production';
 
 const FUNCTIONS_REGION = 'us-central1';
 
@@ -50,6 +57,21 @@ async function waitForAuthReady(timeoutMs = 12000) {
   });
 }
 
+/**
+ * Inyecta `env` en el body JSON si el caller no lo pasó ya.
+ */
+function withEnvBody(options) {
+  if (!options || !options.body) return options;
+  try {
+    const parsed = JSON.parse(options.body);
+    if (!parsed || typeof parsed !== 'object') return options;
+    if (parsed.env) return options;
+    return { ...options, body: JSON.stringify({ ...parsed, env: BACKEND_ENV }) };
+  } catch (_) {
+    return options;
+  }
+}
+
 async function fetchWithIdToken(url, options, requireNonAnonymous) {
   const finalUrl = resolveApiUrl(url);
   const user = await waitForAuthReady();
@@ -60,24 +82,28 @@ async function fetchWithIdToken(url, options, requireNonAnonymous) {
     throw new Error('Se requiere sesión de administrador');
   }
 
+  const enrichedOptions = withEnvBody(options);
+
   let token = await user.getIdToken();
-  Logger.debug('API autenticada', { url: finalUrl });
+  Logger.debug('API autenticada', { url: finalUrl, env: BACKEND_ENV });
   let headers = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
-    ...options.headers,
+    'X-Geovisor-Env': BACKEND_ENV,
+    ...enrichedOptions.headers,
   };
 
-  let res = await fetch(finalUrl, { ...options, headers });
+  let res = await fetch(finalUrl, { ...enrichedOptions, headers });
   if (res.status === 401) {
     Logger.warn(`401 en ${finalUrl}, refrescando token y reintentando`);
     token = await user.getIdToken(true);
     headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
-      ...options.headers,
+      'X-Geovisor-Env': BACKEND_ENV,
+      ...enrichedOptions.headers,
     };
-    res = await fetch(finalUrl, { ...options, headers });
+    res = await fetch(finalUrl, { ...enrichedOptions, headers });
   }
 
   if (!res.ok) {

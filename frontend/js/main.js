@@ -4,9 +4,12 @@
 import { Logger } from './core/logger.js';
 import { ENV, isProd } from './core/env.js';
 import { mountEnvBanner } from './core/env-banner.js';
+import { validateEnvIsolation } from './core/env-validate.js';
 import { bootstrap } from './bootstrap.js';
 
 Logger.info(`🚀 Iniciando Geovisor ISER... (ENV=${ENV})`);
+
+validateEnvIsolation();
 
 if (!isProd) {
   if (document.readyState === 'loading') {

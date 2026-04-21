@@ -2,12 +2,27 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAdmin() {
+    // ═══════════════════════════════════════════════════════════════
+    // HELPERS
+    // ═══════════════════════════════════════════════════════════════
+    function isAdminFromCollection(usersCol) {
       return request.auth != null
-        && exists(/databases/$(database)/documents/usuarios_iser/$(request.auth.uid))
-        && get(/databases/$(database)/documents/usuarios_iser/$(request.auth.uid)).data.role == "admin";
+        && exists(/databases/$(database)/documents/$(usersCol)/$(request.auth.uid))
+        && get(/databases/$(database)/documents/$(usersCol)/$(request.auth.uid)).data.role == "admin";
     }
 
+    // Admin en producción (colección usuarios_iser)
+    function isAdmin() { return isAdminFromCollection('usuarios_iser'); }
+
+    // Admin en staging (colección staging_usuarios_iser)
+    // Un admin de producción también lo es en staging (comodidad para QA).
+    function isStagingAdmin() {
+      return isAdminFromCollection('staging_usuarios_iser') || isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // PRODUCCIÓN — reglas originales
+    // ═══════════════════════════════════════════════════════════════
     match /usuarios_iser/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
       allow create, update, delete: if isAdmin();
@@ -48,6 +63,52 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // STAGING — mismas reglas aplicadas a staging_* (aislamiento total)
+    // ═══════════════════════════════════════════════════════════════
+    match /staging_usuarios_iser/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isStagingAdmin());
+      allow create, update, delete: if isStagingAdmin();
+    }
+
+    match /staging_archivos_iser/{docId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isStagingAdmin();
+    }
+
+    match /staging_bloques_estado/{blockId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isStagingAdmin();
+    }
+
+    match /staging_auditorias_bloques/{blockId} {
+      allow read: if isStagingAdmin();
+      allow create, update, delete: if isStagingAdmin();
+    }
+
+    match /staging_inventario_bloques/{blockId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if false; // solo funciones server-side
+    }
+
+    match /staging_reportes_historial/{reportId} {
+      allow read: if isStagingAdmin();
+      allow create, update, delete: if isStagingAdmin();
+    }
+
+    match /staging_capas_sig/{docId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isStagingAdmin();
+    }
+
+    match /staging_estadisticas/{docId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isStagingAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // DEFAULT DENY
+    // ═══════════════════════════════════════════════════════════════
     match /{document=**} {
       allow read, write: if false;
     }
