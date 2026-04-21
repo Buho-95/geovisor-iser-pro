@@ -67,3 +67,20 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Firebase emulator local data (dev only — no subir al repo)
+emulator-data/
+firebase-export-*/
+*.log
+ui-debug.log
+firestore-debug.log
+storage-debug.log
+auth-debug.log
+database-debug.log
+pubsub-debug.log
+
+# Entornos locales
+.env
+.env.local
+.env.development
+.env.staging

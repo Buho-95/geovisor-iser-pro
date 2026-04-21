@@ -25,7 +25,12 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "sync-config": "node scripts/sync-config.js",
-    "deploy:firebase": "npm run sync-config && firebase deploy --only hosting,functions,firestore,storage --project geovisor-iser"
+    "dev": "npm run sync-config && firebase emulators:start --import=./emulator-data --export-on-exit=./emulator-data --project geovisor-iser",
+    "dev:fresh": "npm run sync-config && firebase emulators:start --project geovisor-iser",
+    "dev:export": "firebase emulators:export ./emulator-data --project geovisor-iser",
+    "preview:deploy": "npm run sync-config && firebase hosting:channel:deploy preview --expires 7d --project geovisor-iser",
+    "deploy:firebase": "npm run sync-config && firebase deploy --only hosting,functions,firestore,storage --project geovisor-iser",
+    "deploy:prod": "npm run deploy:firebase"
   },
   "repository": {
     "type": "git",

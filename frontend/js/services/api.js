@@ -4,12 +4,27 @@
 import { auth } from './firebase.js';
 import { Logger } from '../core/logger.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+import { shouldUseEmulators, EMULATOR_PORTS } from '../core/env.js';
+import { firebaseConfig } from '../core/config.js';
 
-/** Única fuente de URLs de Cloud Run para las Functions HTTPS. */
-export const API_ENDPOINTS = {
+const FUNCTIONS_REGION = 'us-central1';
+
+const PROD_ENDPOINTS = {
   getBlockInventory: 'https://getblockinventory-arhxbhdbiq-uc.a.run.app',
   getNormativeAudit: 'https://getnormativeaudit-arhxbhdbiq-uc.a.run.app',
 };
+
+const EMULATOR_ENDPOINTS = {
+  getBlockInventory: `http://127.0.0.1:${EMULATOR_PORTS.functions}/${firebaseConfig.projectId}/${FUNCTIONS_REGION}/getBlockInventory`,
+  getNormativeAudit: `http://127.0.0.1:${EMULATOR_PORTS.functions}/${firebaseConfig.projectId}/${FUNCTIONS_REGION}/getNormativeAudit`,
+};
+
+/** Única fuente de URLs para Cloud Functions (conmuta automáticamente a emulador en dev). */
+export const API_ENDPOINTS = shouldUseEmulators ? EMULATOR_ENDPOINTS : PROD_ENDPOINTS;
+
+if (shouldUseEmulators) {
+  Logger.info('🧪 API_ENDPOINTS apuntando a emulador de Functions:', API_ENDPOINTS);
+}
 
 function resolveApiUrl(url) {
   if (typeof url !== 'string') return url;

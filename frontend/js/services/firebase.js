@@ -5,11 +5,12 @@
  * reCAPTCHA v3 sin token de depuración.
  */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { getStorage } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getStorage, connectStorageEmulator } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 import { initializeAppCheck, ReCaptchaV3Provider, getToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app-check.js";
 import { firebaseConfig } from '../core/config.js';
+import { shouldUseEmulators, EMULATOR_PORTS, ENV } from '../core/env.js';
 import { Logger } from '../core/logger.js';
 
 const app = initializeApp(firebaseConfig);
@@ -29,14 +30,18 @@ if (isLocalDev) {
 }
 
 let appCheckInstance = null;
-try {
-  appCheckInstance = initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
-    isTokenAutoRefreshEnabled: true
-  });
-  Logger.info('✅ Firebase App Check inicializado.');
-} catch (e) {
-  Logger.warn('⚠️ App Check no pudo inicializarse:', e.message);
+if (!shouldUseEmulators) {
+  try {
+    appCheckInstance = initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+    Logger.info('✅ Firebase App Check inicializado.');
+  } catch (e) {
+    Logger.warn('⚠️ App Check no pudo inicializarse:', e.message);
+  }
+} else {
+  Logger.info('🧪 App Check omitido (modo emuladores).');
 }
 
 // ── Detección proactiva de fallos en App Check ──
@@ -74,4 +79,25 @@ if (appCheckInstance) {
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+// ═══════════════════════════════════════════════════════════════
+// CONEXIÓN A EMULADORES (solo en desarrollo local)
+// ───────────────────────────────────────────────────────────────
+// En producción este bloque NO se ejecuta: shouldUseEmulators solo
+// es true cuando la app corre en localhost/127.0.0.1/[::1].
+// ═══════════════════════════════════════════════════════════════
+if (shouldUseEmulators) {
+  try {
+    connectAuthEmulator(auth, `http://127.0.0.1:${EMULATOR_PORTS.auth}`, { disableWarnings: true });
+    connectFirestoreEmulator(db, '127.0.0.1', EMULATOR_PORTS.firestore);
+    connectStorageEmulator(storage, '127.0.0.1', EMULATOR_PORTS.storage);
+    Logger.info(`🧪 Conectado a emuladores Firebase (ENV=${ENV}).`);
+    Logger.info(`   · Auth:      http://127.0.0.1:${EMULATOR_PORTS.auth}`);
+    Logger.info(`   · Firestore: http://127.0.0.1:${EMULATOR_PORTS.firestore}`);
+    Logger.info(`   · Storage:   http://127.0.0.1:${EMULATOR_PORTS.storage}`);
+    Logger.info(`   · UI:        http://127.0.0.1:4000`);
+  } catch (e) {
+    Logger.error('❌ Error conectando a emuladores Firebase:', e.message);
+  }
+}
 
