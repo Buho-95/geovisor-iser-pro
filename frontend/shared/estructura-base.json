@@ -1,0 +1,191 @@
+{
+  "$schema": "https://geovisor-iser.internal/schemas/estructura-v3.json",
+  "version": "3.0.0",
+  "descripcion": "Estructura canónica de carpetas del Geovisor ISER según PDF oficial. v3 ajusta nivel sede con roles, elimina 11_Historicos de sede, y da subestructura completa a las variantes de laboratorio y 05_Varios.",
+  "notasPDF": {
+    "morado":  "Nivel sede: roles general/proyecciones/varios. 11_Historicos NO va en sede.",
+    "negro":   "Nivel bloque: 11 disciplinas (01_Arquitectonico ... 11_Historicos).",
+    "verde":   "Laboratorio (regla verde): 01_Electricos se expande en [01_General, 02_Laboratorios, 03_Auditorios] con subestructura repetible en CADA UNO.",
+    "rojo":    "Zonas dinámicas NN_Nombre: 05_Varios, 06_Documentos, 07_Matriz, 09_Diagnosticos, 11_Historicos, 02_2026, 04_Documentacion_General, 01_Renders, 02_Presentaciones, 02_Proyecciones hijos, 03_Varios_Sede."
+  },
+  "regex": {
+    "nomenclaturaNN":   "^[0-9]{2}_[A-Za-z0-9_]+$",
+    "nombreDinamicoNN": "^[0-9]{2}_[A-Za-z0-9_]+$"
+  },
+
+  "bloquesConLaboratorio": [
+    "04_Bloque_Administrativo",
+    "09_Bloque_IB"
+  ],
+
+  "disciplinasBaseBloque": [
+    "01_Arquitectonico",
+    "02_Estructural",
+    "03_Electricos_y_Red_de_Datos",
+    "04_Hidrosanitarios_y_Gas",
+    "05_Renders_y_Presentaciones",
+    "06_Documentos",
+    "07_Matriz_Accesibilidad_NTC_6047",
+    "08_Registro_Fotografico",
+    "09_Diagnosticos",
+    "10_Mantenimientos",
+    "11_Historicos"
+  ],
+
+  "subestructuraRepetible": [
+    { "nombre": "01_Modelos_2D_AutoCAD", "dinamica": false },
+    { "nombre": "02_Modelo_3D_SketchUP", "dinamica": false },
+    { "nombre": "03_Entregables_PDF",    "dinamica": false },
+    { "nombre": "04_Modelo_BIM_Revit",   "dinamica": false },
+    { "nombre": "05_Varios",             "dinamica": true  }
+  ],
+
+  "disciplinaBloque": {
+    "01_Arquitectonico":        { "tipo": "subestructura_repetible" },
+    "02_Estructural":           { "tipo": "subestructura_repetible" },
+
+    "03_Electricos_y_Red_de_Datos": {
+      "tipo": "especialidades",
+      "especialidades": {
+        "01_Electricos": {
+          "normal":      { "tipo": "subestructura_repetible" },
+          "laboratorio": {
+            "tipo": "carpetas_con_subestructura_repetible",
+            "carpetas": ["01_General", "02_Laboratorios", "03_Auditorios"]
+          }
+        },
+        "02_Redes_de_Datos": { "tipo": "subestructura_repetible" }
+      }
+    },
+
+    "04_Hidrosanitarios_y_Gas": {
+      "tipo": "especialidades",
+      "especialidades": {
+        "01_Gas":             { "tipo": "subestructura_repetible" },
+        "02_Hidrosanitarios": { "tipo": "subestructura_repetible" }
+      }
+    },
+
+    "05_Renders_y_Presentaciones": {
+      "tipo": "especialidades",
+      "especialidades": {
+        "01_Renders":        { "tipo": "directo", "dinamica": true },
+        "02_Presentaciones": { "tipo": "directo", "dinamica": true }
+      }
+    },
+
+    "06_Documentos":                    { "tipo": "directo", "dinamica": true },
+    "07_Matriz_Accesibilidad_NTC_6047": { "tipo": "directo", "dinamica": true },
+
+    "08_Registro_Fotografico": {
+      "tipo": "fijas",
+      "subcarpetas": [
+        { "nombre": "01_2025", "dinamica": false },
+        { "nombre": "02_2026", "dinamica": true  }
+      ]
+    },
+
+    "09_Diagnosticos":    { "tipo": "directo", "dinamica": true },
+
+    "10_Mantenimientos": {
+      "tipo": "fijas",
+      "subcarpetas": [
+        { "nombre": "01_2025", "dinamica": false },
+        { "nombre": "02_2026", "dinamica": false }
+      ]
+    },
+
+    "11_Historicos": { "tipo": "directo", "dinamica": true }
+  },
+
+  "nivelSedeRoles": {
+    "general": {
+      "tipo": "carpetas_explicitas",
+      "carpetas": {
+        "01_Urbanistico":          { "tipo": "subestructura_repetible" },
+        "02_Topografia":           { "tipo": "subestructura_repetible" },
+        "03_Electricos": {
+          "tipo": "carpetas_explicitas",
+          "carpetas": {
+            "01_Subestaciones":             { "tipo": "subestructura_repetible" },
+            "02_Iluminacion_Zonas_Comunes": { "tipo": "subestructura_repetible" },
+            "03_SSFV_RE4KVA":               { "tipo": "subestructura_repetible" }
+          }
+        },
+        "04_Documentacion_General": { "tipo": "directo", "dinamica": true }
+      }
+    },
+    "proyecciones": {
+      "tipo": "carpetas_explicitas",
+      "carpetas": {
+        "01_Proyectos":           { "tipo": "directo", "dinamica": true },
+        "02_En_Construccion":     { "tipo": "directo", "dinamica": true },
+        "03_Archivos_en_Espera":  { "tipo": "directo", "dinamica": true }
+      }
+    },
+    "varios": {
+      "tipo": "directo",
+      "dinamica": true
+    }
+  },
+
+  "sedes": {
+    "pamplona": {
+      "nombreCanonico": "01_Edificaciones_Sede_Pamplona_ISER_2026",
+      "nombreMostrar":  "Sede Pamplona",
+      "nivelSede": [
+        { "id": "01_General_Sede_Pamplona",            "rol": "general"      },
+        { "id": "02_Proyecciones_Nuevas_Sede_Pamplona","rol": "proyecciones" },
+        { "id": "03_Varios_Sede_Pamplona",             "rol": "varios"       }
+      ],
+      "bloques": {
+        "04_Bloque_Administrativo":              { "mapBlockId": "admin" },
+        "05_Bloque_IA_Residencias":              { "mapBlockId": "ia" },
+        "06_Bloque_de_Archivo":                  { "mapBlockId": "archivo" },
+        "07_Bloque_Laboratorios":                { "mapBlockId": "labs" },
+        "08_Bloque_BS":                          { "mapBlockId": "bs" },
+        "09_Bloque_IB":                          { "mapBlockId": "ib" },
+        "10_Bloque_IC":                          { "mapBlockId": "ic" },
+        "11_Bloque_ID":                          { "mapBlockId": "id" },
+        "12_Planta_de_Plasticos":                { "mapBlockId": "plasticos" },
+        "13_Planta_de_Procesos_Agroindustriales":{ "mapBlockId": "agroindustrial" },
+        "14_Coliseo":                            { "mapBlockId": "coliseo" },
+        "15_Casa_Campesina":                     { "mapBlockId": "casa_campesina" },
+        "16_Carpinteria":                        { "mapBlockId": "carpinteria" },
+        "17_Porteria":                           { "mapBlockId": "porteria" },
+        "18_Antigua_Casa_Rectoral_RAC":          { "mapBlockId": "rac" }
+      }
+    },
+
+    "rinconada": {
+      "nombreCanonico": "02_Granja_la_Rinconada_Pamplona_ISER_2026",
+      "nombreMostrar":  "Granja La Rinconada",
+      "nivelSede": [
+        { "id": "01_General_Granja_La_Rinconada",             "rol": "general"      },
+        { "id": "02_Proyecciones_Nuevas_Granja_La_Rinconada", "rol": "proyecciones" },
+        { "id": "03_Varios_Granja_La_Rinconada",              "rol": "varios"       }
+      ],
+      "bloques": {
+        "04_Casa_Encargados":    { "mapBlockId": null },
+        "05_Bloque_Sala_Ordeno": { "mapBlockId": null },
+        "06_Bloque_Porqueriza":  { "mapBlockId": null },
+        "07_Bloque_Galpon":      { "mapBlockId": null },
+        "08_Bloque_Establo":     { "mapBlockId": null }
+      }
+    },
+
+    "caldera": {
+      "nombreCanonico": "03_Finca_la_Caldera_Mutiscua_ISER_2026",
+      "nombreMostrar":  "Finca La Caldera",
+      "nivelSede": [
+        { "id": "01_General_Finca_La_Caldera",             "rol": "general"      },
+        { "id": "02_Proyecciones_Nuevas_Finca_La_Caldera", "rol": "proyecciones" },
+        { "id": "03_Varios_Finca_La_Caldera",              "rol": "varios"       }
+      ],
+      "bloques": {
+        "04_Casa_Principal": { "mapBlockId": null },
+        "05_Establos":       { "mapBlockId": null }
+      }
+    }
+  }
+}

@@ -10,6 +10,8 @@ import { state } from './core/state.js';
 import { isAdmin } from './services/auth.js';
 import { getFileManager } from './file-manager.js';
 import { estructuraPlanimetriaISER, formatearNombreCarpeta } from './planoteca-structure.js';
+import { isStaging } from './core/env.js';
+import { buildStoragePath, validateStoragePath } from './core/storage-routing.js';
 
 let folderCascadeInitialized = false;
 
@@ -345,7 +347,31 @@ async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
     }
   }
 
-  const rutaStorage = `${storageBasePath}/${state.currentBlockId}/${carpeta}/${fileName}`;
+  // Jerarquía staging (PDF oficial): staging/sedes/{sede}/{bloque}/{disciplina}/{sub}/archivo
+  // Producción: ruta heredada {storageBasePath}/{bloqueId}/{carpeta}/archivo
+  let rutaStorage;
+  if (isStaging) {
+    // `carpeta` viene con formato "Disciplina/Subcarpeta[/Sub2]"
+    const [disciplina, ...restoSub] = String(carpeta).split('/').filter(Boolean);
+    const subcarpeta = restoSub.join('/') || undefined;
+    const sedeId = state?.currentSede || 'pamplona';
+    const bloque = state.currentBlockId; // ID técnico del bloque (campusData key)
+    const pathValidation = validateStoragePath({ disciplina, subcarpeta });
+    if (!pathValidation.ok) {
+      // No bloqueamos si la carpeta hereda (ej: Documentos/Certificados legacy),
+      // pero lo registramos.
+      console.warn('[upload/staging] validateStoragePath:', pathValidation.error);
+    }
+    rutaStorage = buildStoragePath({
+      sedeId,
+      bloque,
+      disciplina,
+      subcarpeta,
+      archivo: fileName,
+    });
+  } else {
+    rutaStorage = `${storageBasePath}/${state.currentBlockId}/${carpeta}/${fileName}`;
+  }
   const fileRef = storageRef(storage, rutaStorage);
 
   return new Promise((resolve) => {
@@ -380,8 +406,15 @@ async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
         try {
           const urlDescarga = await getDownloadURL(uploadTask.snapshot.ref);
 
+          // Metadata enriquecida para auditoría IA
+          const [disciplinaRaw, ...subRest] = String(carpeta || '').split('/').filter(Boolean);
+          const subcarpetaRaw = subRest.join('/') || null;
+          const anioMatch = fileName.match(/(20\d{2})/);
+          const anio = anioMatch ? parseInt(anioMatch[1], 10) : null;
+
           const nuevoRegistro = {
             bloque: state.currentBlockId,
+            sede: state?.currentSede || null,
             nombre: fileName,
             tipo: tipoArchivo,
             carpeta: carpeta,
@@ -390,7 +423,16 @@ async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
             fechaCreacion: serverTimestamp(),
             subidoPor: state.user.email,
             tamaño: file.size,
-            tipoMime: file.type
+            tipoMime: file.type,
+            // Metadata IA
+            ia: {
+              disciplina: disciplinaRaw || null,
+              subcarpeta: subcarpetaRaw,
+              tipoArchivo: tipoArchivo,
+              anio,
+              entorno: isStaging ? 'staging' : 'production',
+              schemaVersion: '1.0.0',
+            },
           };
 
           await addDoc(collection(db, dbPath), nuevoRegistro);

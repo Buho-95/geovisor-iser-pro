@@ -21,6 +21,8 @@ export const COLLECTIONS_RAW = Object.freeze({
   AUDITORIAS_BLOQUES: 'auditorias_bloques',
   REPORTES_HISTORIAL: 'reportes_historial',
   INVENTARIO_BLOQUES: 'inventario_bloques',
+  ESTRUCTURA_BASE:    'estructura_base',
+  ESTRUCTURA_DINAMICA:'estructura_dinamica',
 });
 
 export const STORAGE_PATHS_RAW = Object.freeze({
@@ -39,6 +41,8 @@ export const COLLECTIONS = Object.freeze({
   AUDITORIAS_BLOQUES:  getCollection(COLLECTIONS_RAW.AUDITORIAS_BLOQUES),
   REPORTES_HISTORIAL:  getCollection(COLLECTIONS_RAW.REPORTES_HISTORIAL),
   INVENTARIO_BLOQUES:  getCollection(COLLECTIONS_RAW.INVENTARIO_BLOQUES),
+  ESTRUCTURA_BASE:     getCollection(COLLECTIONS_RAW.ESTRUCTURA_BASE),
+  ESTRUCTURA_DINAMICA: getCollection(COLLECTIONS_RAW.ESTRUCTURA_DINAMICA),
 });
 
 export const STORAGE_PATHS = Object.freeze({

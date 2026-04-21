@@ -29,6 +29,7 @@ import { openViewer, setupVisorButtons, setVisorFileList } from './visor.js';
 import { setupUpload } from './upload.js';
 import { initFileManager, getFileManager } from './file-manager.js';
 import { estructuraPlanimetriaISER } from './planoteca-structure.js';
+import { isStaging } from './core/env.js';
 
 function doSelectBlock(id) {
   setCurrentBlock(id);
@@ -230,8 +231,77 @@ export async function bootstrap() {
       document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
       const target = document.getElementById(`panel-${panel}`);
       if (target) target.classList.add('active');
+
+      // En STAGING: al entrar a "Base de Datos" montamos el árbol canónico (PDF).
+      if (panel === 'planoteca' && isStaging) {
+        mountStagingStructureTreeLazy();
+      }
     });
   });
+
+  // Monta el árbol staging en el panel planoteca (reutilizando contenedores existentes).
+  // Aparece ENCIMA de la vista global heredada para no romper el flujo de producción.
+  async function mountStagingStructureTreeLazy() {
+    if (!isStaging) return;
+    const panel = document.getElementById('panel-planoteca');
+    if (!panel) return;
+    let host = panel.querySelector('#staging-tree-host');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'staging-tree-host';
+      host.style.cssText = 'border-bottom:1px solid var(--border-subtle, #2a3240); margin-bottom:8px;';
+      panel.insertBefore(host, panel.firstChild);
+    }
+    if (host.dataset.mounted === 'true') return;
+    try {
+      const [{ mountStructureTree, injectStructureTreeStyles }] = await Promise.all([
+        import('./modules/structure-tree.js'),
+      ]);
+      injectStructureTreeStyles();
+      await mountStructureTree(host, { sedeId: state?.currentSede || 'pamplona' });
+      host.dataset.mounted = 'true';
+    } catch (err) {
+      Logger.error('❌ [staging] Error montando árbol canónico:', err);
+    }
+  }
+
+  // Escuchar selección de ruta desde el árbol staging → pre-cargar upload.
+  document.addEventListener('geovisor:structure-path-selected', (e) => {
+    const { sedeId, path } = e.detail || {};
+    Logger.info(`[staging] Ruta seleccionada en árbol: ${sedeId}/${path}`);
+    // path es "bloqueId/disciplina/..." o "nivelSedeFolder/..."
+    const parts = String(path).split('/');
+    const [bloqueOrSede, ...rest] = parts;
+    // Si el primer segmento es un bloque (existe en campusData.mapBlockId o en schema.bloques),
+    // tratarlo como selección de bloque. Si no, informativo.
+    if (state?.currentBlockId && rest.length >= 1) {
+      // Pre-cargar campo carpeta y abrir modal si el usuario es admin
+      const hidden = document.getElementById('up-folder');
+      if (hidden) hidden.value = rest.join('/');
+      const btn = document.getElementById('btn-open-upload');
+      if (btn && state.userRole === 'admin') {
+        const fm = getFileManager();
+        fm?.showNotification(`Ruta pre-cargada: ${rest.join('/')}`, 'info');
+      }
+    } else {
+      const fm = getFileManager();
+      fm?.showNotification(`Selecciona primero un bloque en el mapa para subir aquí.`, 'warning');
+    }
+  });
+
+  // Si estamos en staging y la pestaña inicial ya es Base de Datos, montar inmediatamente.
+  if (isStaging) {
+    const initialTab = document.querySelector('.panel-tab.active')?.dataset.panel;
+    if (initialTab === 'planoteca') mountStagingStructureTreeLazy();
+    // Al cambiar de sede en el selector superior, refrescar el árbol.
+    document.getElementById('top-nav-sede-selector')?.addEventListener('change', () => {
+      const host = document.getElementById('staging-tree-host');
+      if (host) host.dataset.mounted = 'false';
+      if (document.getElementById('panel-planoteca')?.classList.contains('active')) {
+        mountStagingStructureTreeLazy();
+      }
+    });
+  }
 
   // Lazy load: Mantenimiento Module
   if (document.getElementById('btn-generate-pdf')) {
