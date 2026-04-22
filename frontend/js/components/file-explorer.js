@@ -57,6 +57,35 @@ export async function showPath({ sedeId, path }) {
   await renderPath(host, { sedeId, path });
 }
 
+/**
+ * API pública para navegar el explorador desde otros módulos.
+ *
+ * Equivalente al flujo completo que usa el click en el árbol:
+ *   1. renderPath (pinta HTML en host, que YA tiene listeners delegados)
+ *   2. _currentSelection actualizado
+ *   3. Emite además `geovisor:structure-path-selected` para que
+ *      otros módulos (dashboard, tree sincronizado, etc.) puedan reaccionar.
+ *
+ * Se usa como ruta "sólida" en navegación interna del explorador
+ * (botón Volver, click en subcarpeta) para garantizar el flujo full:
+ * render + estado + eventos.
+ */
+export async function setExplorerPath({ sedeId, path }) {
+  const resolvedSede = sedeId || _currentSelection?.sedeId || state?.currentSede;
+  if (!resolvedSede) {
+    Logger.warn?.('[file-explorer] setExplorerPath: sede no resuelta');
+    return;
+  }
+  const host = document.getElementById(HOST_ID);
+  if (!host) return;
+  await renderPath(host, { sedeId: resolvedSede, path: String(path || '') });
+  try {
+    document.dispatchEvent(new CustomEvent('geovisor:structure-path-selected', {
+      detail: { sedeId: resolvedSede, path: String(path || '') },
+    }));
+  } catch { /* noop */ }
+}
+
 /* ═══════════════════════ EVENT WIRING ═══════════════════════ */
 
 function wireGlobalEventsOnce() {
@@ -75,6 +104,15 @@ function wireHostInteractions(host) {
   if (host.dataset.xplWired === 'true') return;
   host.dataset.xplWired = 'true';
 
+  // Accesibilidad: Enter/Space en un elemento con role="button" dispara click.
+  host.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const target = e.target?.closest?.('[data-xpl-action]');
+    if (!target) return;
+    e.preventDefault();
+    target.click();
+  });
+
   host.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-xpl-action]');
     if (!btn) return;
@@ -83,6 +121,15 @@ function wireHostInteractions(host) {
 
     if (action === 'refresh') {
       if (_currentSelection) await renderPath(host, _currentSelection);
+      return;
+    }
+    if (action === 'back') {
+      goBackFolder();
+      return;
+    }
+    if (action === 'open-folder') {
+      const folderName = btn.dataset.folderName;
+      if (folderName) await openSubfolder(folderName);
       return;
     }
     if (action === 'upload-here') {
@@ -180,11 +227,26 @@ function renderShell({ sedeId, path, fullStoragePath, files, subfolders, loading
     ? `<div class="xpl-error"><i class="ph ph-warning-circle"></i> ${escapeHtml(error)}</div>`
     : renderList(files || [], subfolders || [], isAdmin);
 
+  // "Volver" sólo tiene sentido cuando el path actual tiene al menos 2 segmentos
+  // (p. ej. Bloque/Disciplina → al pulsar vuelve al Bloque). Si estamos en el
+  // primer nivel (sólo 1 segmento), lo deshabilitamos para evitar emitir un
+  // `structure-path-selected` vacío que el listener descartaría igualmente.
+  const parts    = String(path || '').split('/').filter(Boolean);
+  const canBack  = parts.length >= 2;
+  const backBtn  = `
+    <button class="xpl-btn xpl-btn-back"
+            data-xpl-action="back"
+            title="Volver a la carpeta anterior"
+            ${canBack ? '' : 'disabled aria-disabled="true"'}>
+      <i class="ph ph-arrow-u-up-left"></i> Volver
+    </button>`;
+
   return `
     <div class="xpl-wrap">
       <div class="xpl-header">
         <div class="xpl-bread">${breadcrumb}</div>
         <div class="xpl-actions">
+          ${backBtn}
           <button class="xpl-btn" data-xpl-action="refresh" title="Refrescar">
             <i class="ph ph-arrows-clockwise"></i>
           </button>
@@ -222,11 +284,20 @@ function renderList(files, subfolders, isAdmin) {
       </div>
     `;
   }
+  // Las subcarpetas son navegables: al hacer click se entra en ellas
+  // siguiendo el flujo completo (render + estado + eventos). El handler
+  // está delegado en el host (wireHostInteractions).
   const subRows = subfolders.map(s => `
-    <div class="xpl-row xpl-row-folder">
+    <div class="xpl-row xpl-row-folder"
+         data-xpl-action="open-folder"
+         data-folder-name="${escapeAttr(s.name)}"
+         role="button"
+         tabindex="0"
+         title="Abrir ${escapeAttr(s.name)}">
       <i class="ph-fill ph-folder xpl-icon"></i>
       <span class="xpl-name">${escapeHtml(s.name)}</span>
       <span class="xpl-pill">subcarpeta</span>
+      <i class="ph ph-caret-right xpl-chev" aria-hidden="true"></i>
     </div>
   `).join('');
 
@@ -299,6 +370,53 @@ async function deleteFromCard(host, btn) {
   } catch (err) {
     Logger.error('[file-explorer] Error eliminando:', err);
     alert('No se pudo eliminar: ' + (err?.message || err));
+  }
+}
+
+/**
+ * Sube un nivel en la jerarquía del explorador actual.
+ *
+ * Usa `setExplorerPath` (no el CustomEvent) para garantizar el flujo
+ * completo: render + estado + emisión del evento para oyentes externos.
+ * Así la navegación "Volver" es idéntica en todo a un click desde el árbol
+ * y no se pierde interactividad al re-renderizar.
+ *
+ * Reglas:
+ *   - Si no hay selección activa → no-op.
+ *   - Si el path tiene ≤ 1 segmento → no-op (el botón ya está `disabled`
+ *     en esa situación; este guard es una segunda red de seguridad).
+ */
+function goBackFolder() {
+  const sel = _currentSelection;
+  if (!sel || !sel.path) return;
+  const parts = String(sel.path).split('/').filter(Boolean);
+  if (parts.length <= 1) return;
+
+  parts.pop();
+  const newPath = parts.join('/');
+
+  // FIX 1 del brief: flujo completo (render + estado + evento) en lugar
+  // de un evento suelto que dependería de listeners externos correctos.
+  setExplorerPath({ sedeId: sel.sedeId, path: newPath })
+    .catch(err => Logger.warn?.('[file-explorer] goBackFolder:', err?.message));
+}
+
+/**
+ * Abre una subcarpeta listada en la vista actual.
+ *
+ * Se dispara al hacer click en un `.xpl-row-folder`. Construye el nuevo
+ * path concatenando la selección actual + el nombre de la subcarpeta, y
+ * delega en `setExplorerPath` (misma vía que el árbol o el botón Volver).
+ */
+async function openSubfolder(folderName) {
+  const sel = _currentSelection;
+  if (!sel || !folderName) return;
+  const base = String(sel.path || '').replace(/\/+$/, '');
+  const newPath = base ? `${base}/${folderName}` : folderName;
+  try {
+    await setExplorerPath({ sedeId: sel.sedeId, path: newPath });
+  } catch (err) {
+    Logger.warn?.('[file-explorer] openSubfolder:', err?.message);
   }
 }
 
@@ -458,14 +576,23 @@ function injectStyles() {
     .xpl-btn-mini { padding: 4px 7px; font-size:0.72rem; }
     .xpl-btn-danger { color:#fca5a5; border-color: rgba(239,68,68,0.4); }
     .xpl-btn-danger:hover { background: rgba(239,68,68,0.14); color:#fff; border-color:#ef4444; }
+    .xpl-btn-back i { font-size: 0.92rem; }
+    .xpl-btn:disabled, .xpl-btn[disabled] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+    .xpl-btn:active:not(:disabled) { transform: scale(0.97); }
 
     .xpl-meta { font-size:0.66rem; color:#64748b; word-break: break-all; }
     .xpl-meta code { background: transparent; color:#64748b; }
 
     .xpl-body { display:block; }
     .xpl-list { display:flex; flex-direction:column; gap:4px; }
-    .xpl-row { display:flex; align-items:center; gap:10px; padding: 8px 10px; border-radius:8px; background: rgba(148,163,184,0.04); border:1px solid transparent; }
+    .xpl-row { display:flex; align-items:center; gap:10px; padding: 8px 10px; border-radius:8px; background: rgba(148,163,184,0.04); border:1px solid transparent; transition: background .12s ease, border-color .12s ease, transform .08s ease; }
     .xpl-row:hover { background: rgba(148,163,184,0.08); border-color: rgba(148,163,184,0.18); }
+    .xpl-row-folder { cursor: pointer; user-select: none; }
+    .xpl-row-folder:hover { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.28); }
+    .xpl-row-folder:focus-visible { outline: 2px solid rgba(34,197,94,0.55); outline-offset: 2px; }
+    .xpl-row-folder:active { transform: scale(0.996); background: rgba(34,197,94,0.12); }
+    .xpl-chev { margin-left:auto; font-size:14px; color:#64748b; opacity:0; transition: opacity .15s ease, transform .15s ease; }
+    .xpl-row-folder:hover .xpl-chev { opacity:1; transform: translateX(2px); color:#22c55e; }
     .xpl-icon { font-size:18px; color:#94a3b8; flex: 0 0 auto; }
     .xpl-row-folder .xpl-icon { color:#fbbf24; }
     .xpl-row-file .xpl-icon { color:#67e8f9; }

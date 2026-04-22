@@ -12,6 +12,7 @@ import { getFileManager } from './file-manager.js';
 import { estructuraPlanimetriaISER, formatearNombreCarpeta } from './planoteca-structure.js';
 import { isStaging } from './core/env.js';
 import { buildStoragePath, validateStoragePath } from './core/storage-routing.js';
+import { logUploadPath, logUploadDone } from './modules/diagnostics.js';
 
 let folderCascadeInitialized = false;
 
@@ -407,6 +408,16 @@ async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
   } else {
     rutaStorage = `${storageBasePath}/${state.currentBlockId}/${carpeta}/${fileName}`;
   }
+  // Diagnóstico: registra el path real que se va a usar en Storage
+  // (visible en consola — §3 del brief). No altera la lógica ni el path.
+  logUploadPath(rutaStorage, {
+    sedeId: state?.currentSede,
+    bloqueId: state?.currentBlockId,
+    carpeta,
+    fileName,
+    tipoArchivo,
+    isStaging,
+  });
   const fileRef = storageRef(storage, rutaStorage);
 
   return new Promise((resolve) => {
@@ -471,6 +482,8 @@ async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
           };
 
           await addDoc(collection(db, dbPath), nuevoRegistro);
+          // Diagnóstico: confirma que el objeto existe en Storage con ese path.
+          logUploadDone(rutaStorage, { fileName, sedeId: state?.currentSede, bloqueId: state?.currentBlockId });
           resolve({ success: true, fileName: fileName, registro: nuevoRegistro });
 
         } catch (error) {

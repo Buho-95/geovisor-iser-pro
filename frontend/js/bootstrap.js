@@ -40,6 +40,7 @@ import { mountBlockContentView } from './modules/block-content-view.js';
 import { renderDashboard, invalidateRiskSnapshot } from './modules/dashboard-view.js';
 import { clearAuditCache } from './modules/dashboard-engine.js';
 import { enhanceUploadModal } from './modules/upload-modal-enhance.js';
+import { installDiagnostics } from './modules/diagnostics.js';
 
 function doSelectBlock(id) {
   setCurrentBlock(id);
@@ -176,6 +177,10 @@ export async function bootstrap() {
   // Unifica la experiencia del modal de subida (breadcrumb, estados,
   // auto-cierre en éxito). No duplica listeners ni lógica de upload.
   enhanceUploadModal();
+  // Instrumentación de diagnóstico: expone window.__geovisorDiag para
+  // verificar path, bucket, listAll y eventos desde la consola sin modificar
+  // código. Desactivable con localStorage.setItem('geovisor:disable-diag','1').
+  installDiagnostics();
 
   // Inicializar el gestor de archivos mejorado
   initFileManager();
