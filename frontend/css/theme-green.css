@@ -692,3 +692,176 @@ body.env-development #env-badge {
    El block-content-view ya define la variante soft. Aquí sólo
    aseguramos coherencia si styles.css pinta fondos conflictivos. */
 #panel-planoteca { background: transparent; }
+
+/* ================================================================
+   25. LOGIN / AUTH SCREEN
+   ================================================================
+   • Fondo global con radial verde → midnight.
+   • Card glass oscura, bordes sutiles, blur.
+   • Jerarquía visual invertida:
+       - Acceso Administrador → botón verde primario (principal).
+       - Ingresar como Visitante → botón glass secundario.
+   • Inputs con focus verde (reemplaza cyan).
+   • Sin !important: ganamos por especificidad natural vs styles.css.
+   ================================================================ */
+
+/* Fondo general del login — radial verde suave sobre midnight. */
+#auth-screen {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(34, 197, 94, 0.14),
+    var(--geo-bg-main) 72%
+  );
+}
+
+/* Card contenedora: glass oscuro + borde sutil. */
+#auth-screen .login-card {
+  background: var(--geo-panel);
+  border: 1px solid var(--geo-border);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 32px 64px rgba(0, 0, 0, 0.55),
+              0 0 0 1px rgba(74, 222, 128, 0.04);
+}
+
+#auth-screen .login-side-visitor {
+  border-right-color: var(--geo-border);
+}
+
+/* Icono pin — gradient verde + glow sutil. */
+#auth-screen .login-icon-pin {
+  background: linear-gradient(135deg, #22c55e, #065f46);
+  box-shadow: 0 8px 24px var(--geo-accent-glow),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Logo ISER — blanco puro, peso visual + glow verde suave. */
+#auth-screen .login-brand {
+  color: #ffffff;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 18px rgba(74, 222, 128, 0.35),
+               0 2px 6px rgba(0, 0, 0, 0.35);
+}
+#auth-screen .login-subtitle {
+  color: var(--geo-accent-bright);
+  letter-spacing: 0.14em;
+}
+#auth-screen .login-logo-sencillo {
+  filter: drop-shadow(0 0 12px rgba(74, 222, 128, 0.22));
+}
+
+/* ───── INPUTS ───── */
+#auth-screen .login-label {
+  color: var(--geo-text-muted);
+}
+#auth-screen .login-input-wrap i {
+  color: var(--geo-text-dim);
+  transition: color var(--geo-t-fast) var(--geo-ease);
+}
+#auth-screen .login-input-wrap:focus-within i {
+  color: var(--geo-accent-bright);
+}
+#auth-screen .login-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--geo-text);
+  border-radius: var(--geo-radius-sm);
+  transition: border-color var(--geo-t-fast) var(--geo-ease),
+              box-shadow var(--geo-t-fast) var(--geo-ease),
+              background var(--geo-t-fast) var(--geo-ease);
+}
+#auth-screen .login-input::placeholder { color: var(--geo-text-dim); }
+#auth-screen .login-input:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+#auth-screen .login-input:focus {
+  border-color: var(--geo-accent);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.20);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ───── BOTÓN LOGIN (PRIMARIO) ─────
+   Reemplaza gradiente pink→azul por verde corporativo. */
+#auth-screen .btn-login {
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  color: #f0fdf4;
+  border-radius: var(--geo-radius-sm);
+  text-shadow: none;
+  box-shadow: 0 6px 18px rgba(34, 197, 94, 0.25);
+  transition: transform var(--geo-t-fast) var(--geo-ease),
+              box-shadow var(--geo-t-fast) var(--geo-ease),
+              filter var(--geo-t-fast) var(--geo-ease);
+}
+#auth-screen .btn-login:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: 0 10px 26px var(--geo-accent-glow);
+}
+
+/* ───── BOTÓN VISITANTE (SECUNDARIO) ─────
+   Glass oscuro, menos peso visual que el admin. */
+#auth-screen .btn-visitor {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--geo-text);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--geo-border-strong);
+  border-radius: var(--geo-radius-sm);
+  box-shadow: none;
+  backdrop-filter: blur(var(--geo-blur));
+  -webkit-backdrop-filter: blur(var(--geo-blur));
+  transition: color var(--geo-t-fast) var(--geo-ease),
+              background var(--geo-t-fast) var(--geo-ease),
+              border-color var(--geo-t-fast) var(--geo-ease),
+              transform var(--geo-t-fast) var(--geo-ease),
+              box-shadow var(--geo-t-fast) var(--geo-ease);
+}
+#auth-screen .btn-visitor:hover {
+  background: var(--geo-accent-hover);
+  border-color: var(--geo-accent-border);
+  color: var(--geo-accent-bright);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(34, 197, 94, 0.18);
+}
+
+/* Nota de visitante — color accent verde suave. */
+#auth-screen .login-visitor-note {
+  color: var(--geo-text-muted);
+}
+#auth-screen .login-visitor-note span {
+  color: var(--geo-accent-bright);
+}
+
+/* Título "Acceso Administrador" — icono ámbar discreto. */
+#auth-screen .login-admin-title {
+  color: var(--geo-text);
+}
+#auth-screen .login-admin-title > i {
+  color: #fbbf24;
+}
+#auth-screen .login-admin-sub,
+#auth-screen .login-admin-note {
+  color: var(--geo-text-muted);
+}
+
+/* Footer discreto. */
+#auth-screen .login-footer {
+  color: var(--geo-text-dim);
+}
+#auth-screen .login-footer strong {
+  color: var(--geo-text-muted);
+}
+
+/* Error de login — rojo sobrio. */
+#auth-screen #login-error {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: var(--geo-radius-sm);
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  margin-top: 0.75rem;
+}
