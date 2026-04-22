@@ -30,11 +30,21 @@ import { setupUpload } from './upload.js';
 import { initFileManager, getFileManager } from './file-manager.js';
 import { estructuraPlanimetriaISER } from './planoteca-structure.js';
 import { isStaging } from './core/env.js';
+import {
+  setSede as setUiSede,
+  setBloque as setUiBloque,
+  hydrateFromLegacy as hydrateUiState,
+} from './core/ui-state.js';
+import { mountSedeSwitcher } from './components/sede-switcher.js';
 
 function doSelectBlock(id) {
   setCurrentBlock(id);
   highlightBlock(id, state.currentBlockId);
   showBlockView(id, (blockId) => state.archivosNube?.filter(a => a.bloque === blockId) || []);
+
+  // Propagar a ui-state (nuevo estado reactivo). El árbol de Base de Datos
+  // escucha este evento para auto-expandir el bloque correspondiente.
+  try { setUiBloque(id); } catch { /* no-op */ }
 
   // Update upload modal block name
   const blockNameEl = document.getElementById('upload-block-name');
@@ -64,6 +74,22 @@ export async function bootstrap() {
   setGetCurrentBlockId(() => state.currentBlockId);
 
   initLeafletMap(doSelectBlock);
+
+  // ─── Montar Sede Switcher (pill overlay sobre el mapa) ───
+  // En staging ocultamos el selector legacy del top-nav para evitar duplicados.
+  try {
+    await hydrateUiState();
+    const mapColumn = document.querySelector('.map-column');
+    if (mapColumn) {
+      mountSedeSwitcher(mapColumn, { initial: state?.currentSede || 'pamplona' });
+    }
+    if (isStaging) {
+      const legacyWrap = document.querySelector('[data-role="legacy-sede-selector"]');
+      if (legacyWrap) legacyWrap.style.display = 'none';
+    }
+  } catch (err) {
+    Logger.warn?.('[bootstrap] No se pudo montar sede-switcher:', err);
+  }
 
   // Cache campus data for upload modal
   try {
@@ -119,6 +145,8 @@ export async function bootstrap() {
     sedeSelector.addEventListener('change', (e) => {
       const nuevaSede = e.target.value;
       setSede(nuevaSede);
+      // Propagar al estado UI reactivo (reset bloque + emit sede-changed).
+      try { setUiSede(nuevaSede); } catch { /* no-op */ }
       Logger.info(`🏛️ Sede cambiada a: ${nuevaSede}`);
 
       // 🗺️ Cambiar vista del mapa con flyTo + polígonos
@@ -293,14 +321,16 @@ export async function bootstrap() {
   if (isStaging) {
     const initialTab = document.querySelector('.panel-tab.active')?.dataset.panel;
     if (initialTab === 'planoteca') mountStagingStructureTreeLazy();
-    // Al cambiar de sede en el selector superior, refrescar el árbol.
-    document.getElementById('top-nav-sede-selector')?.addEventListener('change', () => {
+    // Al cambiar de sede (selector legacy o pill switcher), refrescar el árbol.
+    const refreshTreeOnSede = () => {
       const host = document.getElementById('staging-tree-host');
       if (host) host.dataset.mounted = 'false';
       if (document.getElementById('panel-planoteca')?.classList.contains('active')) {
         mountStagingStructureTreeLazy();
       }
-    });
+    };
+    document.getElementById('top-nav-sede-selector')?.addEventListener('change', refreshTreeOnSede);
+    document.addEventListener('geovisor:sede-changed', refreshTreeOnSede);
   }
 
   // Lazy load: Mantenimiento Module

@@ -17,18 +17,22 @@ import { Logger } from '../core/logger.js';
 import { openDynamicFolderModal } from './dynamic-folder-modal.js';
 import { emit, EVENTS } from '../core/events.js';
 import { normalizeToArray, normalizeItem } from '../core/iter-utils.js';
+import {
+  getSedeActiva,
+  getBloqueSeleccionado,
+  UI_EVENTS,
+} from '../core/ui-state.js';
 
 const TREE_ROOT_ID = 'staging-structure-tree';
 
 export async function mountStructureTree(container, { sedeId } = {}) {
   if (!container) throw new Error('mountStructureTree: contenedor inválido.');
-  sedeId = sedeId || state?.currentSede || 'pamplona';
+  sedeId = sedeId || getSedeActiva() || state?.currentSede || 'pamplona';
 
   container.innerHTML = renderShell(sedeId);
   const host = container.querySelector(`#${TREE_ROOT_ID}`);
 
   try {
-    // Failsafe: si listDynamicFolders falla (permisos, red), seguimos renderizando el árbol base.
     const treeP = buildSedeTree(sedeId);
     const dynP  = listDynamicFolders(sedeId).catch(err => {
       Logger.warn?.('[structure-tree] listDynamicFolders falló, se renderiza sin dinámicas:', err?.message || err);
@@ -38,11 +42,83 @@ export async function mountStructureTree(container, { sedeId } = {}) {
     const dynByParent = groupDynamicsByParent(dyn);
 
     host.innerHTML = renderSede(tree, dynByParent);
+
+    // Transición suave al montar/remontar.
+    host.classList.add('stree-fade-in');
+    requestAnimationFrame(() => host.classList.remove('stree-fade-in'));
+
     wireInteractions(host, { sedeId, onDynamicCreated: () => refreshTree(container, sedeId) });
+
+    // Reactividad a ui-state (se enlaza una sola vez por container).
+    wireUiStateListeners(container);
+
+    // Si ya hay bloque seleccionado al montar, expandirlo.
+    const bloqueActual = getBloqueSeleccionado();
+    if (bloqueActual) expandBloqueInTree(host, bloqueActual);
+
+    // Refrescar título con el bloque actual (si lo hay).
+    updateTreeTitle(container, sedeId, bloqueActual);
   } catch (err) {
     Logger.error('[structure-tree] Error montando árbol:', err);
     host.innerHTML = `<div class="stree-error">No se pudo cargar la estructura: ${escapeHtml(err?.message || String(err))}</div>`;
   }
+}
+
+/* ═══════════════════════ UI-STATE INTEGRATION ═══════════════════════ */
+
+/**
+ * Enlaza listeners globales una sola vez por container para reaccionar a:
+ *   geovisor:sede-changed    → re-montar
+ *   geovisor:bloque-selected → auto-expandir bloque en el árbol
+ */
+function wireUiStateListeners(container) {
+  if (container.dataset.uiListeners === 'true') return;
+  container.dataset.uiListeners = 'true';
+
+  const onSede = (e) => {
+    const { sede } = e.detail || {};
+    if (!sede) return;
+    // Remontar con la nueva sede.
+    mountStructureTree(container, { sedeId: sede }).catch(err =>
+      Logger.error('[structure-tree] sede-changed remount falló:', err));
+  };
+  const onBloque = (e) => {
+    const { bloque, sede } = e.detail || {};
+    const host = container.querySelector(`#${TREE_ROOT_ID}`);
+    if (!host) return;
+    updateTreeTitle(container, sede || getSedeActiva(), bloque);
+    if (bloque) expandBloqueInTree(host, bloque);
+  };
+
+  document.addEventListener(UI_EVENTS.SEDE_CHANGED, onSede);
+  document.addEventListener(UI_EVENTS.BLOQUE_SELECTED, onBloque);
+}
+
+function updateTreeTitle(container, sedeId, bloqueId) {
+  const titleEl = container.querySelector('.stree-title');
+  if (!titleEl) return;
+  const sedeTxt = sedeDisplay(sedeId);
+  const bloqueTxt = bloqueId ? ` → <em>${escapeHtml(bloqueId)}</em>` : '';
+  titleEl.innerHTML = `
+    <i class="ph ph-tree-structure"></i>
+    <span class="stree-title-main">Estructura canónica (PDF) — <strong>${escapeHtml(sedeTxt)}</strong>${bloqueTxt}</span>
+  `;
+}
+
+function expandBloqueInTree(host, bloqueId) {
+  const target = host.querySelector(`details.stree-bloque[data-path="${escapeAttr(bloqueId)}"]`);
+  if (!target) return;
+  // Abrir padres (section) y el nodo.
+  let el = target;
+  while (el && el !== host) {
+    if (el.tagName === 'DETAILS') el.open = true;
+    el = el.parentElement;
+  }
+  // Highlight efímero.
+  target.classList.add('stree-highlight');
+  setTimeout(() => target.classList.remove('stree-highlight'), 1600);
+  // Scroll al nodo.
+  try { target.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { /* noop */ }
 }
 
 async function refreshTree(container, sedeId) {
@@ -367,6 +443,25 @@ export function injectStructureTreeStyles() {
     .stree-btn:hover { color:#fff; border-color:rgba(148,163,184,0.4); background: rgba(148,163,184,0.08); }
     .stree-btn-new:hover { color:#ef4444; border-color:#ef4444; }
     .stree-btn-select:hover { color:#06b6d4; border-color:#06b6d4; }
+
+    /* Transiciones UI */
+    .stree-fade-in { animation: streeFadeIn 180ms ease-out; }
+    @keyframes streeFadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: none; }
+    }
+    details.stree-bloque.stree-highlight > summary {
+      background: rgba(34, 211, 238, 0.18);
+      box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.45);
+      transition: background 220ms ease, box-shadow 220ms ease;
+      border-radius: 6px;
+    }
+    .stree-title-main em {
+      font-style: normal;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      color: #22d3ee;
+      font-size: 0.78rem;
+    }
 
     /* Modal crear carpeta */
     .sdfm-backdrop { position:fixed; inset:0; background: rgba(0,0,0,0.55); z-index: 9998; display:flex; align-items:center; justify-content:center; }

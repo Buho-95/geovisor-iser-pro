@@ -56,11 +56,17 @@ export async function getSubestructuraRepetible() {
 }
 
 /**
- * REGLA VERDE — lista explícita del schema.
+ * REGLA VERDE — lista explícita del schema + guardia de sede.
+ *
+ * La regla verde sólo aplica en pamplona (ninguna otra sede tiene laboratorios).
+ * Si se omite `sedeId`, se preserva el comportamiento legacy (sólo la lista).
  */
-export async function esBloqueConLaboratorio(bloqueId) {
+export async function esBloqueConLaboratorio(bloqueId, sedeId) {
   const s = await loadSchema();
-  return normalizeToArray(s.bloquesConLaboratorio).includes(bloqueId);
+  const enLista = normalizeToArray(s.bloquesConLaboratorio).includes(bloqueId);
+  if (!enLista) return false;
+  if (sedeId != null && sedeId !== 'pamplona') return false;
+  return true;
 }
 
 /* ═══════════════ Construcción de árbol ═══════════════ */
@@ -280,7 +286,7 @@ export async function buildSedeTree(sedeId) {
   const bloques = [];
   for (const bloqueId of bloqueIds) {
     const tree = await buildBloqueTree(sedeId, bloqueId);
-    const esLab = await esBloqueConLaboratorio(bloqueId);
+    const esLab = await esBloqueConLaboratorio(bloqueId, sedeId);
     bloques.push({
       name: bloqueId, nombre: bloqueId, path: bloqueId, kind: 'bloque',
       tipo: esLab ? 'laboratorio' : 'normal',
