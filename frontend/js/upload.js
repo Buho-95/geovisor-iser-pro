@@ -12,6 +12,7 @@ import { getFileManager } from './file-manager.js';
 import { estructuraPlanimetriaISER, formatearNombreCarpeta } from './planoteca-structure.js';
 import { isStaging } from './core/env.js';
 import { buildStoragePath, validateStoragePath } from './core/storage-routing.js';
+import { resolveBloqueCanonical } from './core/structure-schema.js';
 import { logUploadPath, logUploadDone } from './modules/diagnostics.js';
 
 let folderCascadeInitialized = false;
@@ -391,7 +392,26 @@ async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
     const [disciplina, ...restoSub] = String(carpeta).split('/').filter(Boolean);
     const subcarpeta = restoSub.join('/') || undefined;
     const sedeId = state?.currentSede || 'pamplona';
-    const bloque = state.currentBlockId; // ID técnico del bloque (campusData key)
+    const rawBloque = state.currentBlockId; // ID técnico del mapa (p. ej. "ib", "ia")
+
+    // ⚡ Fix desincronización shortId ↔ canónico.
+    // El mapa emite ids cortos ("ib") pero el explorer/dashboard leen con el
+    // nombre canónico del schema ("09_Bloque_IB"). Si subimos con el shortId,
+    // el archivo queda en un path huérfano que nadie lista. Resolvemos SIEMPRE
+    // al canónico antes de construir la ruta. Si no hay canónico (bloque no
+    // registrado en schema) caemos al raw y dejamos constancia.
+    const bloqueCanonical = await resolveBloqueCanonical(sedeId, rawBloque);
+    const bloque = bloqueCanonical || rawBloque;
+    if (!bloqueCanonical) {
+      console.warn(
+        '[upload/staging] No se pudo resolver canónico para',
+        rawBloque, `(sede=${sedeId}). Subo con el id crudo; revisa el schema.`);
+    } else if (bloqueCanonical !== rawBloque) {
+      console.log(
+        `%c[upload] bloque "${rawBloque}" → canónico "${bloqueCanonical}"`,
+        'color:#16a34a;font-weight:bold');
+    }
+
     const pathValidation = validateStoragePath({ disciplina, subcarpeta });
     if (!pathValidation.ok) {
       // No bloqueamos si la carpeta hereda (ej: Documentos/Certificados legacy),

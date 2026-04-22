@@ -13,24 +13,57 @@ import { firebaseConfig } from '../core/config.js';
 import { shouldUseEmulators, EMULATOR_PORTS, ENV } from '../core/env.js';
 import { Logger } from '../core/logger.js';
 
-const app = initializeApp(firebaseConfig);
+// ═══════════════════════════════════════════════════════════════
+// APP CHECK — DEBUG TOKEN EN DESARROLLO (fix 403)
+// ───────────────────────────────────────────────────────────────
+// Firebase lee la flag `self.FIREBASE_APPCHECK_DEBUG_TOKEN` en el
+// momento de inicializarse. POR ESO debe asignarse ANTES de cualquier
+// llamada a initializeApp() / initializeAppCheck(). Si se hace después
+// (como estaba antes), Firebase ya ha cacheado el modo producción y
+// bloquea las requests con 403 en Storage/Firestore.
+//
+// Se activa sólo en hostnames locales (desarrollo). En producción
+// (Hosting real) el flag NUNCA se asigna y App Check funciona con
+// el token real de reCAPTCHA.
+//
+// Opción de escape: si en localhost App Check sigue bloqueando, se
+// puede saltar totalmente con:
+//   localStorage.setItem('geovisor:disable-appcheck','1'); location.reload();
+// ═══════════════════════════════════════════════════════════════
+const host = typeof location !== 'undefined' ? location.hostname : '';
+const isLocalDev =
+  host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
 
+let skipAppCheck = false;
+try {
+  skipAppCheck = isLocalDev
+    && localStorage.getItem('geovisor:disable-appcheck') === '1';
+} catch { /* localStorage puede fallar en contextos restringidos */ }
+
+if (isLocalDev) {
+  // Debe estar asignado ANTES de initializeApp (línea siguiente).
+  self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  // eslint-disable-next-line no-console
+  console.log(
+    '%c[Firebase] App Check debug activo',
+    'background:#16a34a;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold',
+    '(localhost) — registra el token que imprime Firebase en Console → App Check → Apps → Debug tokens.'
+  );
+}
+
+const app = initializeApp(firebaseConfig);
 
 // ⚠️ Reemplaza con tu clave real de ReCAPTCHA v3 (solo usada en producción).
 // Cuando debug token está activo, Firebase ignora la clave de sitio.
 // Obtenla en: https://www.google.com/recaptcha/admin
 const RECAPTCHA_SITE_KEY = '6LdYAJMsAAAAAPhabJ2yXRSq_M-3WxfCiYJcypUe';
 
-const host = typeof location !== 'undefined' ? location.hostname : '';
-const isLocalDev =
-  host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
-if (isLocalDev) {
-  self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-  Logger.info('App Check: modo debug (localhost). En producción se usa reCAPTCHA sin token de depuración.');
-}
-
 let appCheckInstance = null;
-if (!shouldUseEmulators) {
+if (skipAppCheck) {
+  Logger.warn('⚠️ App Check DESACTIVADO manualmente en desarrollo (flag localStorage).');
+  // eslint-disable-next-line no-console
+  console.warn('[Firebase] App Check omitido por flag geovisor:disable-appcheck=1');
+} else if (!shouldUseEmulators) {
   try {
     appCheckInstance = initializeAppCheck(app, {
       provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),

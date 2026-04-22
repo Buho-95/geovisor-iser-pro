@@ -44,6 +44,53 @@ export async function getBloqueInfo(sedeId, bloqueId) {
   if (!b) return null;
   return { id: bloqueId, ...b };
 }
+
+/**
+ * Traduce un id de bloque (puede venir del mapa como "ib", "ia", "admin" ...)
+ * al nombre canónico usado en Storage y en el schema
+ * (p. ej. "09_Bloque_IB", "05_Bloque_IA_Residencias", "04_Bloque_Administrativo").
+ *
+ * El puente está en `overrides.sedeBloqueOverrides[sede][nombreCanonical].mapBlockId`.
+ * Si `rawId` YA es canónico (existe como clave en `sede.bloques`), se devuelve tal cual.
+ *
+ * Contrato:
+ *   - Devuelve string canónico si encuentra match.
+ *   - Devuelve `null` si no hay match y no puede decidir con seguridad.
+ *     → el caller decide qué hacer (fallar, usar fallback, avisar).
+ *
+ * Fuente única de verdad para upload.js / explorer / dashboard. NO construye
+ * paths: sólo resuelve el id. El prefijo staging/ lo añade buildStoragePath().
+ */
+export async function resolveBloqueCanonical(sedeId, rawId) {
+  if (!sedeId || !rawId) return null;
+  const schema = await loadSchema().catch(() => null);
+  if (!schema) return null;
+  const sede = schema.sedes?.[sedeId];
+  if (!sede) return null;
+
+  const bloques = sede.bloques || {};
+
+  // 1) Si ya viene el canónico, devolverlo sin tocar.
+  if (Object.prototype.hasOwnProperty.call(bloques, rawId)) return rawId;
+
+  const needle = String(rawId).toLowerCase();
+
+  // 2) Overrides explícitos: mapBlockId === rawId  →  nombre canónico.
+  const overrides = schema.overrides?.sedeBloqueOverrides?.[sedeId] || {};
+  for (const [nombreCanonical, meta] of Object.entries(overrides)) {
+    const mapId = meta?.mapBlockId;
+    if (mapId && String(mapId).toLowerCase() === needle) {
+      if (Object.prototype.hasOwnProperty.call(bloques, nombreCanonical)) {
+        return nombreCanonical;
+      }
+    }
+  }
+
+  // 3) Búsqueda case-insensitive entre las claves canónicas (p. ej. rawId="IB" → "09_Bloque_IB").
+  const canonical = Object.keys(bloques).find(name =>
+    String(name).toLowerCase().includes(needle));
+  return canonical || null;
+}
 export async function getDisciplinasBloque() {
   const s = await loadSchema();
   return normalizeToArray(s.disciplinasBaseBloque, { label: 'schema.disciplinasBaseBloque' }).slice();
