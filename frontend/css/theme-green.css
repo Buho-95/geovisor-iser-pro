@@ -865,3 +865,307 @@ body.env-development #env-badge {
   font-size: 0.78rem;
   margin-top: 0.75rem;
 }
+
+/* ================================================================
+   26. LOGIN MICRO-UX (accesibilidad, feedback, autofill)
+   ================================================================ */
+
+/* Focus accesible con ring verde — aplica a inputs y botones del login. */
+#auth-screen .login-input:focus-visible,
+#auth-screen .btn-login:focus-visible,
+#auth-screen .btn-visitor:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.35);
+}
+
+/* Hover elevación botón principal — refuerza jerarquía admin. */
+#auth-screen .btn-login {
+  transition: transform 160ms var(--geo-ease),
+              box-shadow 160ms var(--geo-ease),
+              filter var(--geo-t-fast) var(--geo-ease);
+}
+#auth-screen .btn-login:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(34, 197, 94, 0.35);
+}
+
+/* Autofill del navegador — evita el azul claro del Chrome. */
+#auth-screen input:-webkit-autofill,
+#auth-screen input:-webkit-autofill:hover,
+#auth-screen input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--geo-text);
+  caret-color: var(--geo-text);
+  transition: background-color 9999s ease-in-out 0s;
+  box-shadow: inset 0 0 0 9999px rgba(255, 255, 255, 0.04);
+}
+
+/* ================================================================
+   27. DASHBOARD — AUDITORÍA DE COMPLETITUD
+   ================================================================
+   Cards glass oscuras con barra de progreso verde. Alertas en ámbar.
+   No pisa el dashboard-pro existente (este bloque se aplica solo a
+   #dashboard-audit-root, contenedor aislado del motor de auditoría).
+   ================================================================ */
+
+#dashboard-audit-root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 0;
+  color: var(--geo-text);
+}
+
+#dashboard-audit-root .dash-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px 2px;
+}
+#dashboard-audit-root .dash-head-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--geo-text);
+}
+#dashboard-audit-root .dash-head-title i {
+  color: var(--geo-accent-bright);
+  margin-right: 6px;
+}
+#dashboard-audit-root .dash-head-sede {
+  font-size: 11px;
+  color: var(--geo-text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Estado cargando */
+#dashboard-audit-root .dash-loading,
+#dashboard-audit-root .dash-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 16px;
+  background: var(--geo-panel-alt);
+  border: 1px dashed var(--geo-border);
+  border-radius: var(--geo-radius);
+  color: var(--geo-text-muted);
+  font-size: 0.88rem;
+}
+#dashboard-audit-root .dash-loading i { color: var(--geo-accent-bright); }
+
+/* KPI global */
+#dashboard-audit-root .dash-kpi {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+#dashboard-audit-root .dash-kpi-card {
+  background: var(--geo-panel);
+  border: 1px solid var(--geo-border);
+  border-radius: var(--geo-radius);
+  padding: 12px 14px;
+  backdrop-filter: blur(var(--geo-blur));
+  -webkit-backdrop-filter: blur(var(--geo-blur));
+}
+#dashboard-audit-root .dash-kpi-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--geo-text-muted);
+}
+#dashboard-audit-root .dash-kpi-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--geo-accent-bright);
+  margin-top: 2px;
+}
+#dashboard-audit-root .dash-kpi-value.dim { color: var(--geo-text); }
+#dashboard-audit-root .dash-kpi-value.warn { color: #fbbf24; }
+
+/* Grid de cards por bloque */
+#dashboard-audit-root .dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+#dashboard-audit-root .dash-card {
+  background: rgba(10, 25, 20, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 14px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: border-color var(--geo-t-fast) var(--geo-ease),
+              background var(--geo-t-fast) var(--geo-ease),
+              transform var(--geo-t-fast) var(--geo-ease);
+}
+#dashboard-audit-root .dash-card:hover {
+  border-color: var(--geo-accent-border);
+  transform: translateY(-1px);
+}
+
+#dashboard-audit-root .dash-title {
+  font-size: 13px;
+  color: var(--geo-text-muted);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+}
+#dashboard-audit-root .dash-title .dash-lab {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.14);
+  color: var(--geo-accent-bright);
+  border: 1px solid var(--geo-accent-border);
+}
+#dashboard-audit-root .dash-percent {
+  font-size: 22px;
+  font-weight: 700;
+  color: #4ade80;
+  margin-top: 4px;
+}
+#dashboard-audit-root .dash-percent.low { color: #fbbf24; }
+#dashboard-audit-root .dash-percent.empty { color: #f87171; }
+
+#dashboard-audit-root .dash-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 6px 0 8px;
+}
+#dashboard-audit-root .dash-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  border-radius: inherit;
+  transition: width 400ms var(--geo-ease);
+}
+#dashboard-audit-root .dash-bar-fill.low {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+#dashboard-audit-root .dash-bar-fill.empty {
+  background: linear-gradient(90deg, #ef4444, #b91c1c);
+}
+
+#dashboard-audit-root .dash-meta {
+  font-size: 11px;
+  color: var(--geo-text-dim);
+}
+
+/* Panel de alertas (carpetas vacías) */
+#dashboard-audit-root .dash-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: rgba(245, 158, 11, 0.04);
+  border: 1px solid rgba(245, 158, 11, 0.20);
+  border-radius: var(--geo-radius);
+}
+#dashboard-audit-root .dash-alerts-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #fbbf24;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+#dashboard-audit-root .dash-alert {
+  font-size: 12px;
+  color: var(--geo-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--geo-radius-sm);
+  background: rgba(10, 25, 20, 0.35);
+  border: 1px solid rgba(245, 158, 11, 0.12);
+}
+#dashboard-audit-root .dash-alert i { color: #fbbf24; }
+#dashboard-audit-root .dash-alert b { color: var(--geo-text); font-weight: 600; }
+#dashboard-audit-root .dash-alert .path {
+  color: var(--geo-text-muted);
+  font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Menlo, monospace;
+  font-size: 11px;
+}
+#dashboard-audit-root .dash-alerts-empty {
+  font-size: 12px;
+  color: var(--geo-accent-bright);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#dashboard-audit-root .dash-alerts-empty i { color: var(--geo-accent-bright); }
+
+/* ================================================================
+   28. DASHBOARD — SEVERIDAD DE ALERTAS + CARDS CLICKEABLES
+   ================================================================
+   Alertas: barra izquierda coloreada según severidad del hueco.
+   Cards: cursor + hover reforzado porque ahora son navegables
+          (disparan `geovisor:bloque-selected` vía ui-state).
+   ================================================================ */
+
+/* Severidad de alertas */
+#dashboard-audit-root .dash-alert {
+  border-left-width: 3px;
+  border-left-style: solid;
+  border-left-color: rgba(255, 255, 255, 0.04);
+}
+#dashboard-audit-root .dash-alert.high {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+}
+#dashboard-audit-root .dash-alert.high i { color: #f87171; }
+#dashboard-audit-root .dash-alert.high b { color: #fecaca; }
+
+#dashboard-audit-root .dash-alert.medium {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.05);
+}
+#dashboard-audit-root .dash-alert.medium i { color: #fbbf24; }
+#dashboard-audit-root .dash-alert.medium b { color: #fde68a; }
+
+#dashboard-audit-root .dash-alert.low {
+  border-left-color: #22c55e;
+}
+#dashboard-audit-root .dash-alert.low i { color: var(--geo-accent-bright); }
+
+/* Cards clickeables → navegación real */
+#dashboard-audit-root .dash-card.is-clickable {
+  cursor: pointer;
+  user-select: none;
+}
+#dashboard-audit-root .dash-card.is-clickable:hover {
+  border-color: var(--geo-accent-strong);
+  box-shadow: 0 8px 22px var(--geo-accent-glow),
+              inset 0 0 0 1px rgba(74, 222, 128, 0.10);
+  transform: translateY(-2px);
+}
+#dashboard-audit-root .dash-card.is-clickable:focus-visible {
+  outline: none;
+  border-color: var(--geo-accent-bright);
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.35);
+}
+#dashboard-audit-root .dash-card.is-clickable:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+/* Alertas clickeables (las que traen data-bloque también navegan). */
+#dashboard-audit-root .dash-alert[data-bloque] {
+  cursor: pointer;
+  transition: background var(--geo-t-fast) var(--geo-ease),
+              transform var(--geo-t-fast) var(--geo-ease);
+}
+#dashboard-audit-root .dash-alert[data-bloque]:hover {
+  transform: translateX(2px);
+}

@@ -37,6 +37,8 @@ import { mountSedeSwitcher } from './components/sede-switcher.js';
 import { mountSedeSwitcherFab } from './components/sede-switcher-fab.js';
 import { mountFileExplorer } from './components/file-explorer.js';
 import { mountBlockContentView } from './modules/block-content-view.js';
+import { renderDashboard } from './modules/dashboard-view.js';
+import { clearAuditCache } from './modules/dashboard-engine.js';
 
 function doSelectBlock(id) {
   setCurrentBlock(id);
@@ -208,6 +210,19 @@ export async function bootstrap() {
     }
   });
 
+  // ─── Dashboard Inteligente: monta el dashboard real (engine + view).
+  //    Limpia el host y renderiza en `#dashboard-audit-root` interno.
+  function mountDashboard() {
+    const host = document.getElementById('dashboard-container');
+    if (!host) return;
+    const sedeId = state?.currentSede || window.currentSedeId || 'pamplona';
+    try {
+      renderDashboard({ sedeId, mountEl: host });
+    } catch (err) {
+      Logger.error('❌ Error montando Dashboard Inteligente:', err);
+    }
+  }
+
   // ─── Panel Tabs (Visor / Base de Datos / Dashboard) ───
   document.querySelectorAll('.panel-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -225,6 +240,10 @@ export async function bootstrap() {
       // Al entrar a "Base de Datos" montamos el explorador real (árbol + archivos).
       if (panel === 'planoteca') {
         mountBaseDatosExplorerLazy();
+      }
+      // Al entrar a "Dashboard" corremos la auditoría real contra Storage.
+      if (panel === 'dashboard') {
+        mountDashboard();
       }
     });
   });
@@ -272,6 +291,7 @@ export async function bootstrap() {
   // Si la pestaña inicial es Base de Datos, montar inmediatamente.
   const initialTab = document.querySelector('.panel-tab.active')?.dataset.panel;
   if (initialTab === 'planoteca') mountBaseDatosExplorerLazy();
+  if (initialTab === 'dashboard') mountDashboard();
 
   // Refrescar árbol al cambiar de sede (sede-switcher → ui-state → evento global).
   document.addEventListener('geovisor:sede-changed', () => {
@@ -281,6 +301,31 @@ export async function bootstrap() {
       mountBaseDatosExplorerLazy({ force: true });
     }
   });
+
+  // ─── Dashboard: invalidar caché y re-auditar al cambiar de sede.
+  //    La caché de listAll() por path vive en dashboard-engine; al cambiar
+  //    de sede el universo de paths cambia, así que la vaciamos.
+  document.addEventListener('geovisor:sede-changed', () => {
+    clearAuditCache();
+    if (document.getElementById('panel-dashboard')?.classList.contains('active')) {
+      mountDashboard();
+    }
+  });
+
+  // ─── Dashboard: invalidar caché cuando se sube o elimina un archivo.
+  //    El dashboard refleja cambios sin recarga de página. Si la tab
+  //    dashboard está activa, re-pinta; si no, la próxima vez que se
+  //    abra tomará los datos frescos.
+  const invalidateAndMaybeRemount = () => {
+    clearAuditCache();
+    if (document.getElementById('panel-dashboard')?.classList.contains('active')) {
+      mountDashboard();
+    }
+  };
+  window.addEventListener('geovisor:file-uploaded', invalidateAndMaybeRemount);
+  window.addEventListener('geovisor:file-deleted',  invalidateAndMaybeRemount);
+  document.addEventListener('geovisor:file-uploaded', invalidateAndMaybeRemount);
+  document.addEventListener('geovisor:file-deleted',  invalidateAndMaybeRemount);
 
   // Lazy load: Mantenimiento Module
   if (document.getElementById('btn-generate-pdf')) {
@@ -294,23 +339,12 @@ export async function bootstrap() {
     }
   }
 
-  // Lazy load: Dashboard
-  if (document.getElementById('dashboard-container')) {
-    try {
-      const { initDashboardPro } = await import('./dashboard.js?v=dashboard-pro-2');
-      initDashboardPro();
-    } catch (e) {
-      Logger.error('❌ Error cargando Dashboard Pro:', e);
-      const el = document.getElementById('dashboard-container');
-      if (el) {
-        el.textContent = '';
-        const d = document.createElement('div');
-        d.style.cssText = 'padding:16px;color:var(--text-muted);font-size:0.85rem;';
-        d.textContent = 'No se pudo cargar el Dashboard.';
-        el.appendChild(d);
-      }
-    }
-  }
+  // Dashboard Pro legacy: desactivado. Reemplazado por el Dashboard
+  // Inteligente (engine + view) que audita completitud real contra
+  // Firebase Storage y se monta al activar la tab o al cambiar sede.
+  // El módulo `dashboard.js` sigue disponible por si se quiere revertir;
+  // sólo se quitó la llamada automática para evitar doble render en el
+  // mismo `#dashboard-container`.
 
   // Lazy load: Auditoría Normativa (Fase 2 - Dashboard)
   try {
