@@ -1,0 +1,365 @@
+/* ================================================================
+   Geovisor ISER — Tema verde profesional (solo CSS)
+   ================================================================
+   • Base oscura + acentos verdes. Nunca verdes como fondo principal.
+   • Sobrescribe a los estilos inyectados por los componentes JS
+     (structure-tree, block-content-view, file-explorer) sin tocar
+     su lógica. Carga al FINAL de la cascada para ganar especificidad
+     natural; donde dos selectores tienen igual peso, gana este archivo
+     por orden de carga.
+   • No cambia layout ni estructura. Solo color, borde, sombra,
+     transición y scrollbar.
+   ================================================================ */
+
+/* ───────── 1. TOKENS DEL TEMA ───────── */
+:root {
+  --geo-bg-main:        #0b1120;
+  --geo-panel:          rgba(10, 25, 20, 0.65);
+  --geo-panel-alt:      rgba(10, 25, 20, 0.45);
+
+  --geo-accent:         #22c55e;         /* verde primario */
+  --geo-accent-bright:  #4ade80;         /* activo / selección */
+  --geo-accent-soft:    rgba(34, 197, 94, 0.10);
+  --geo-accent-hover:   rgba(34, 197, 94, 0.15);
+  --geo-accent-border:  rgba(34, 197, 94, 0.30);
+  --geo-accent-strong:  rgba(34, 197, 94, 0.55);
+  --geo-accent-glow:    rgba(74, 222, 128, 0.35);
+
+  --geo-danger:         #f87171;
+
+  --geo-text:           #e5e7eb;
+  --geo-text-muted:     #9ca3af;
+  --geo-text-dim:       #64748b;
+
+  --geo-border:         rgba(255, 255, 255, 0.06);
+  --geo-border-soft:    rgba(255, 255, 255, 0.04);
+  --geo-border-strong:  rgba(255, 255, 255, 0.10);
+
+  --geo-radius:         10px;
+  --geo-radius-sm:      8px;
+  --geo-blur:           10px;
+
+  --geo-ease:           cubic-bezier(0.2, 0.8, 0.2, 1);
+  --geo-t-fast:         160ms;
+  --geo-t-med:          200ms;
+}
+
+/* ───────── 2. SCROLLBARS (fino, oscuro, moderno) ───────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.22) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--geo-accent-border);
+  background-clip: content-box;
+}
+
+/* ───────── 3. TABS DEL PANEL DERECHO ─────────
+   Línea inferior verde activa, sin cajas pesadas. */
+.panel-tab {
+  transition: color var(--geo-t-fast) var(--geo-ease),
+              border-color var(--geo-t-fast) var(--geo-ease),
+              background var(--geo-t-fast) var(--geo-ease);
+  border-bottom: 2px solid transparent;
+}
+.panel-tab:hover {
+  color: var(--geo-accent-bright);
+  background: var(--geo-accent-soft);
+}
+.panel-tab.active {
+  color: var(--geo-accent-bright);
+  border-bottom-color: var(--geo-accent);
+  box-shadow: inset 0 -2px 0 var(--geo-accent);
+}
+
+/* ───────── 4. PANELES GLASS DEL EXPLORADOR BD ───────── */
+#panel-planoteca .explorer-tree-pane,
+#panel-planoteca .explorer-files-pane {
+  background: var(--geo-panel);
+  border-color: var(--geo-border);
+  backdrop-filter: blur(var(--geo-blur));
+  -webkit-backdrop-filter: blur(var(--geo-blur));
+}
+#panel-planoteca .explorer-tree-pane:hover {
+  border-color: var(--geo-accent-border);
+}
+/* Evitar dobles bordes/fondos entre pane y componente interno */
+#panel-planoteca .explorer-files-pane .xpl-wrap,
+#panel-planoteca .explorer-files-pane .bcv-wrap {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+/* ───────── 5. ÁRBOL (structure-tree) ─────────
+   Override de los estilos cyan inyectados por el módulo. */
+#explorer-tree-host .stree-node > summary:hover,
+#explorer-tree-host .stree-leaf:hover {
+  background: var(--geo-accent-hover);
+  box-shadow: inset 2px 0 0 var(--geo-accent);
+  transform: translateX(2px);
+}
+#explorer-tree-host .stree-leaf.is-selected {
+  background: var(--geo-accent-hover);
+  border: 1px solid var(--geo-accent-border);
+  box-shadow: inset 2px 0 0 var(--geo-accent-bright),
+              0 0 0 1px rgba(74, 222, 128, 0.12);
+}
+#explorer-tree-host .stree-leaf.is-selected .stree-icon {
+  color: var(--geo-accent-bright);
+}
+/* Leyenda "permite crear" — matiz ámbar suave, no rojo estridente */
+#explorer-tree-host .stree-legend .dot-dyn { background: #f59e0b; }
+#explorer-tree-host .stree-badge.dyn {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.28);
+}
+#explorer-tree-host .stree-node.is-dynamic > summary .stree-icon {
+  color: #fbbf24;
+}
+/* Botón "Seleccionar carpeta" — antes cyan */
+#explorer-tree-host .stree-btn-select:hover {
+  color: var(--geo-accent-bright);
+  border-color: var(--geo-accent-border);
+}
+/* Title accent */
+#explorer-tree-host .stree-title-main em { color: var(--geo-accent-bright); }
+
+/* ───────── 6. CHIPS DE BLOQUE ─────────
+   Selección limpia, acento verde. */
+#explorer-tree-host .stree-block-chip {
+  background: rgba(10, 25, 20, 0.55);
+  border-color: var(--geo-border);
+  color: var(--geo-text);
+}
+#explorer-tree-host .stree-block-chip:hover {
+  background: var(--geo-accent-hover);
+  border-color: var(--geo-accent-border);
+  color: #f0fdf4;
+  transform: translateX(2px);
+}
+#explorer-tree-host .stree-block-chip.is-active {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: var(--geo-accent-strong);
+  color: #f0fdf4;
+  box-shadow: inset 3px 0 0 var(--geo-accent-bright),
+              0 0 0 1px rgba(74, 222, 128, 0.14);
+}
+#explorer-tree-host .stree-block-chip.is-lab .stree-chip-icon,
+#explorer-tree-host .stree-block-chip.is-normal .stree-chip-icon {
+  color: var(--geo-accent-bright);
+}
+#explorer-tree-host .stree-chip-badge {
+  background: rgba(34, 197, 94, 0.14);
+  color: var(--geo-accent-bright);
+  border-color: var(--geo-accent-border);
+}
+#explorer-tree-host .stree-block-hint i { color: var(--geo-accent-bright); }
+
+/* ───────── 7. BLOCK CONTENT VIEW (panel derecho) ─────────
+   Override de los tonos cyan por verde. */
+.bcv-host .bcv-header {
+  background: linear-gradient(180deg, var(--geo-accent-soft), transparent);
+  border-bottom-color: var(--geo-border);
+}
+.bcv-host .bcv-title > i { color: var(--geo-accent-bright); }
+.bcv-host .bcv-empty-icon {
+  background: var(--geo-accent-soft);
+  border-color: var(--geo-accent-border);
+  color: var(--geo-accent-bright);
+}
+.bcv-host .bcv-node > summary:hover,
+.bcv-host .bcv-leaf:hover {
+  background: var(--geo-accent-hover);
+  border-color: var(--geo-accent-border);
+  transform: translateX(2px);
+}
+.bcv-host .bcv-leaf.is-selected {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: var(--geo-accent-strong);
+  box-shadow: inset 3px 0 0 var(--geo-accent-bright);
+}
+.bcv-host .bcv-leaf.is-selected .bcv-icon {
+  color: var(--geo-accent-bright);
+}
+.bcv-host .bcv-node[open] > summary .bcv-caret {
+  color: var(--geo-accent-bright);
+}
+/* Botones de acción del acordeón */
+.bcv-host .bcv-btn:hover {
+  color: #f0fdf4;
+  background: var(--geo-accent-hover);
+  border-color: var(--geo-accent-border);
+}
+/* Pill "abrir" que asoma al hover en hojas */
+.bcv-host .bcv-row:hover .bcv-meta-pill { color: var(--geo-accent-bright); }
+/* Badges dinámicos: ámbar en vez de rojo/naranja saturado */
+.bcv-host .bcv-badge.dyn,
+.bcv-host .bcv-badge.custom {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.28);
+}
+.bcv-host .bcv-node.is-dynamic > summary .bcv-icon,
+.bcv-host .bcv-leaf.is-dynamic .bcv-icon {
+  color: #fbbf24;
+}
+
+/* ───────── 8. FILE EXPLORER ─────────
+   Header sticky con blur + filas hover verde suave. */
+#explorer-files-host .xpl-header {
+  background: rgba(10, 25, 20, 0.80);
+  backdrop-filter: blur(var(--geo-blur));
+  -webkit-backdrop-filter: blur(var(--geo-blur));
+  border-bottom-color: var(--geo-border);
+}
+#explorer-files-host .xpl-crumb.root {
+  background: var(--geo-accent-soft);
+  color: #bbf7d0;
+  border-color: var(--geo-accent-border);
+}
+#explorer-files-host .xpl-btn:hover {
+  color: #fff;
+  background: var(--geo-accent-hover);
+  border-color: var(--geo-accent-border);
+}
+#explorer-files-host .xpl-btn-primary {
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(34, 197, 94, 0.25);
+}
+#explorer-files-host .xpl-btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 14px var(--geo-accent-glow);
+}
+#explorer-files-host .xpl-btn-danger {
+  color: #fecaca;
+  border-color: rgba(239, 68, 68, 0.35);
+}
+#explorer-files-host .xpl-btn-danger:hover {
+  color: #fff;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: #ef4444;
+}
+/* Filas */
+#explorer-files-host .xpl-row {
+  background: rgba(10, 25, 20, 0.35);
+  border: 1px solid transparent;
+  transition: transform var(--geo-t-fast) var(--geo-ease),
+              background var(--geo-t-fast) var(--geo-ease),
+              border-color var(--geo-t-fast) var(--geo-ease);
+}
+#explorer-files-host .xpl-row:hover {
+  background: var(--geo-accent-hover);
+  border-color: var(--geo-accent-border);
+  transform: translateX(2px);
+}
+#explorer-files-host .xpl-row-file .xpl-icon { color: var(--geo-accent-bright); }
+#explorer-files-host .xpl-row-folder .xpl-icon { color: #a7f3d0; }
+/* Estado vacío del explorador */
+#explorer-files-host .xpl-empty i { color: var(--geo-text-dim); }
+#explorer-files-host .xpl-empty-title { color: var(--geo-text); }
+
+/* ───────── 9. MAPA: controles Leaflet + barra de coordenadas ───────── */
+/* Zoom y capas con glass oscuro + hover verde */
+.leaflet-control-zoom a,
+.leaflet-control-layers-toggle,
+.map-floating-ctrl {
+  background: rgba(11, 17, 32, 0.85) !important;
+  color: var(--geo-text) !important;
+  border: 1px solid var(--geo-border) !important;
+  backdrop-filter: blur(var(--geo-blur));
+  -webkit-backdrop-filter: blur(var(--geo-blur));
+  transition: background var(--geo-t-fast) var(--geo-ease),
+              border-color var(--geo-t-fast) var(--geo-ease),
+              color var(--geo-t-fast) var(--geo-ease);
+}
+.leaflet-control-zoom a:hover,
+.leaflet-control-layers-toggle:hover,
+.map-floating-ctrl:hover {
+  background: rgba(34, 197, 94, 0.20) !important;
+  border-color: var(--geo-accent-border) !important;
+  color: #f0fdf4 !important;
+}
+.leaflet-control-layers-expanded {
+  background: rgba(11, 17, 32, 0.92) !important;
+  color: var(--geo-text) !important;
+  border: 1px solid var(--geo-border) !important;
+  border-radius: var(--geo-radius) !important;
+  backdrop-filter: blur(var(--geo-blur));
+  -webkit-backdrop-filter: blur(var(--geo-blur));
+}
+.leaflet-control-layers-expanded label { color: var(--geo-text); }
+/* Barra de coordenadas: caja translúcida elegante */
+.map-coords-bar {
+  background: rgba(10, 25, 20, 0.55) !important;
+  border: 1px solid var(--geo-border) !important;
+  backdrop-filter: blur(var(--geo-blur));
+  -webkit-backdrop-filter: blur(var(--geo-blur));
+  color: var(--geo-text-muted);
+  border-radius: var(--geo-radius-sm);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+}
+.map-coords-bar .map-coords-value { color: var(--geo-accent-bright); }
+/* FAB de sede — acento verde sutil en hover */
+.sede-fab:hover {
+  border-color: var(--geo-accent-border) !important;
+  color: var(--geo-accent-bright) !important;
+  box-shadow: 0 8px 22px var(--geo-accent-glow) !important;
+}
+
+/* ───────── 10. SEDE SWITCHER PILL (overlay mapa) ───────── */
+.sede-switcher-pill {
+  background: rgba(10, 25, 20, 0.70) !important;
+  border: 1px solid var(--geo-border) !important;
+  backdrop-filter: blur(var(--geo-blur));
+  -webkit-backdrop-filter: blur(var(--geo-blur));
+}
+.sede-switcher-btn {
+  color: var(--geo-text-muted) !important;
+  transition: color var(--geo-t-fast) var(--geo-ease),
+              background var(--geo-t-fast) var(--geo-ease);
+}
+.sede-switcher-btn:hover {
+  color: var(--geo-accent-bright) !important;
+  background: var(--geo-accent-hover) !important;
+}
+.sede-switcher-btn.active {
+  color: #f0fdf4 !important;
+  background: rgba(34, 197, 94, 0.22) !important;
+  box-shadow: inset 0 0 0 1px var(--geo-accent-border),
+              0 0 12px var(--geo-accent-glow);
+}
+
+/* ───────── 11. BADGE/BANNER DE ENTORNO ─────────
+   No altera los de staging (naranja) / development (rojo): sólo
+   suaviza el box-shadow para armonizar con el tema. */
+.env-corner-badge { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
+
+/* ───────── 12. HIGHLIGHTS EFÍMEROS DEL ÁRBOL ───────── */
+details.stree-bloque.stree-highlight > summary {
+  background: rgba(34, 197, 94, 0.20) !important;
+  box-shadow: 0 0 0 2px var(--geo-accent-strong) !important;
+}
+
+/* ───────── 13. MODALES: acentos secundarios ─────────
+   Mantiene el modal rojo de carpeta dinámica (acción destructiva
+   intencional) pero armoniza el ok button. No toca .sdfm-btn.ok
+   (crear carpeta). El foco de inputs sí a verde. */
+.sdfm-input:focus { border-color: var(--geo-accent) !important; }
+
+/* ───────── 14. SELECCIÓN DE TEXTO ───────── */
+::selection {
+  background: rgba(34, 197, 94, 0.30);
+  color: #f0fdf4;
+}

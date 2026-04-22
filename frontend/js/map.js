@@ -45,11 +45,14 @@ export function highlightBlock(id, currentBlockId) {
     const baseColor = blockStateColor || blocks[polyId]?.color || '#FFFFFF';
 
     if (polyId === id) {
-      poly.setStyle({ fillOpacity: 0.8, weight: 3, color: '#FFFFFF', fillColor: baseColor });
+      // Bloque seleccionado: opacidad fuerte + borde blanco grueso (efecto glow).
+      poly.setStyle({ fillOpacity: 0.92, weight: 4, color: '#FFFFFF', fillColor: baseColor, dashArray: null });
+      try { poly.bringToFront(); } catch { /* noop */ }
       if (map) map.flyToBounds(poly.getBounds(), { padding: [40, 40], maxZoom: 20, duration: 0.5 });
     } else {
       if (blocks[polyId]) {
-        poly.setStyle({ fillOpacity: 0.35, weight: 2, color: baseColor, fillColor: baseColor });
+        // Resto: opacidad reducida (~25%) para destacar el seleccionado.
+        poly.setStyle({ fillOpacity: 0.22, weight: 1.5, color: baseColor, fillColor: baseColor });
       }
     }
   });
@@ -84,7 +87,8 @@ export function initLeafletMap(onBlockSelect) {
   _onBlockSelectCallback = onBlockSelect;
 
   const sedeConfig = getSedeConfig('pamplona');
-  map = L.map('map', { maxZoom: 22 }).setView(sedeConfig.center, sedeConfig.zoom);
+  // zoomControl:false → lo agregamos manualmente abajo-derecha (FASE 2 del rediseño UI).
+  map = L.map('map', { maxZoom: 22, zoomControl: false }).setView(sedeConfig.center, sedeConfig.zoom);
 
   // ═══════════════════════════════════════════════════════
   // 🌐 SELECTOR DE MAPAS BASE (Layers Control)
@@ -124,10 +128,13 @@ export function initLeafletMap(onBlockSelect) {
     '🏔️ Topográfico': topoLayer
   };
 
+  // Orden importa en Leaflet: el primero agregado a un corner queda ARRIBA.
+  // Queremos: [Capas] arriba, [Zoom +/-] abajo (esquina inferior derecha).
   L.control.layers(baseLayers, null, {
     position: 'bottomright',
     collapsed: true
   }).addTo(map);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
 
   // ─── Dibujar sede inicial (Pamplona) ───
   _drawSede('pamplona', onBlockSelect);

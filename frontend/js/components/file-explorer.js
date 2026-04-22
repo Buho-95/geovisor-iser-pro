@@ -1,0 +1,412 @@
+/**
+ * file-explorer.js — Panel de archivos reales para el explorador BD.
+ *
+ * Escucha `geovisor:structure-path-selected` (emitido por structure-tree.js)
+ * y lista los archivos en Storage para esa ruta jerárquica:
+ *   <STORAGE_PREFIX>sedes/{sedeId}/{path...}
+ *
+ * SOLO frontend. NO modifica schema, seed, reglas ni rutas Storage.
+ * Usa exclusivamente helpers ya existentes (`buildStoragePath`) y el SDK de Firebase.
+ *
+ * Acciones disponibles por archivo:
+ *   - Ver       → openViewer(file)
+ *   - Descargar → enlace `getDownloadURL`
+ *   - Eliminar  → deleteObject (solo admin)
+ *   - Subir aquí → pre-carga ruta y abre el modal de upload existente
+ */
+import { Logger } from '../core/logger.js';
+import { state } from '../core/state.js';
+import { buildStoragePath } from '../core/storage-routing.js';
+import { storage } from '../services/firebase.js';
+import {
+  ref as storageRef,
+  listAll,
+  getDownloadURL,
+  getMetadata,
+  deleteObject,
+} from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js';
+import { openViewer, setVisorFileList } from '../visor.js';
+
+const HOST_ID = 'explorer-files-host';
+const PLACEHOLDER_KEEP = '.keep';
+
+let _wired = false;
+let _currentSelection = null; // { sedeId, path, storagePath }
+
+/* ═══════════════════════ PUBLIC API ═══════════════════════ */
+
+export function mountFileExplorer(host) {
+  if (!host) host = document.getElementById(HOST_ID);
+  if (!host) return;
+  host.classList.add('xpl-host');
+  if (host.childElementCount === 0) {
+    host.innerHTML = renderEmpty();
+  }
+  injectStyles();
+  wireGlobalEventsOnce();
+  wireHostInteractions(host);
+}
+
+/**
+ * Carga programática de una ruta sin pasar por el evento (útil en pruebas).
+ */
+export async function showPath({ sedeId, path }) {
+  const host = document.getElementById(HOST_ID);
+  if (!host) return;
+  await renderPath(host, { sedeId, path });
+}
+
+/* ═══════════════════════ EVENT WIRING ═══════════════════════ */
+
+function wireGlobalEventsOnce() {
+  if (_wired) return;
+  _wired = true;
+  document.addEventListener('geovisor:structure-path-selected', async (e) => {
+    const { sedeId, path } = e.detail || {};
+    if (!sedeId || !path) return;
+    const host = document.getElementById(HOST_ID);
+    if (!host) return;
+    await renderPath(host, { sedeId, path });
+  });
+}
+
+function wireHostInteractions(host) {
+  if (host.dataset.xplWired === 'true') return;
+  host.dataset.xplWired = 'true';
+
+  host.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-xpl-action]');
+    if (!btn) return;
+    e.preventDefault();
+    const action = btn.dataset.xplAction;
+
+    if (action === 'refresh') {
+      if (_currentSelection) await renderPath(host, _currentSelection);
+      return;
+    }
+    if (action === 'upload-here') {
+      openUploadAtCurrentPath();
+      return;
+    }
+    if (action === 'view') {
+      openFromCard(btn, 'view');
+      return;
+    }
+    if (action === 'delete') {
+      await deleteFromCard(host, btn);
+      return;
+    }
+  });
+}
+
+/* ═══════════════════════ RENDER ═══════════════════════ */
+
+async function renderPath(host, { sedeId, path }) {
+  // path puede traer la ruta canónica completa partiendo de bloque o de carpeta nivel-sede.
+  // Lo pasamos íntegro como `subcarpeta` (multi-segment soportado por buildStoragePath).
+  const fullStoragePath = buildStoragePath({ sedeId, subcarpeta: path });
+  _currentSelection = { sedeId, path, storagePath: fullStoragePath };
+
+  host.innerHTML = renderShell({ sedeId, path, fullStoragePath, loading: true });
+
+  try {
+    const folderRef = storageRef(storage, fullStoragePath);
+    const result = await listAll(folderRef);
+
+    // Filtrar placeholders .keep que el seed crea para mantener carpetas vacías visibles.
+    const items = (result.items || []).filter(it => it.name !== PLACEHOLDER_KEEP);
+
+    // Resolver metadata + URL en paralelo (con tolerancia a fallos individuales).
+    const files = await Promise.all(items.map(async (it) => {
+      try {
+        const [meta, url] = await Promise.all([
+          getMetadata(it).catch(() => null),
+          getDownloadURL(it).catch(() => null),
+        ]);
+        return {
+          name: it.name,
+          fullPath: it.fullPath,
+          size: meta?.size ?? null,
+          contentType: meta?.contentType ?? null,
+          updated: meta?.updated ?? meta?.timeCreated ?? null,
+          url,
+        };
+      } catch (err) {
+        Logger.warn?.('[file-explorer] no se pudo leer metadata:', err?.message || err);
+        return { name: it.name, fullPath: it.fullPath, size: null, contentType: null, updated: null, url: null };
+      }
+    }));
+
+    // Ordenar: por fecha desc, fallback por nombre.
+    files.sort((a, b) => {
+      if (a.updated && b.updated) return new Date(b.updated) - new Date(a.updated);
+      return String(a.name).localeCompare(String(b.name));
+    });
+
+    const subfolders = (result.prefixes || []).map(p => ({ name: p.name }));
+    host.innerHTML = renderShell({ sedeId, path, fullStoragePath, files, subfolders });
+    // Actualizar lista de navegación del visor para flechas prev/next.
+    try {
+      setVisorFileList(files.map(f => ({
+        nombre: f.name,
+        url: f.url,
+        tipo: guessTipo(f.name),
+        storagePath: f.fullPath,
+      })));
+    } catch { /* noop */ }
+  } catch (err) {
+    Logger.error('[file-explorer] Error listando ruta:', err);
+    host.innerHTML = renderShell({ sedeId, path, fullStoragePath, error: err?.message || String(err) });
+  }
+}
+
+function renderEmpty() {
+  return `
+    <div class="xpl-empty">
+      <i class="ph ph-folder-open"></i>
+      <p class="xpl-empty-title">Selecciona una carpeta del árbol</p>
+      <p class="xpl-empty-sub">Aquí aparecerán los archivos de la ruta elegida (sede → bloque → disciplina → subcarpeta).</p>
+    </div>
+  `;
+}
+
+function renderShell({ sedeId, path, fullStoragePath, files, subfolders, loading, error }) {
+  const breadcrumb = renderBreadcrumb(sedeId, path);
+  const isAdmin = state?.userRole === 'admin';
+  const list = loading
+    ? `<div class="xpl-loading">Cargando archivos…</div>`
+    : error
+    ? `<div class="xpl-error"><i class="ph ph-warning-circle"></i> ${escapeHtml(error)}</div>`
+    : renderList(files || [], subfolders || [], isAdmin);
+
+  return `
+    <div class="xpl-wrap">
+      <div class="xpl-header">
+        <div class="xpl-bread">${breadcrumb}</div>
+        <div class="xpl-actions">
+          <button class="xpl-btn" data-xpl-action="refresh" title="Refrescar">
+            <i class="ph ph-arrows-clockwise"></i>
+          </button>
+          ${isAdmin ? `
+            <button class="xpl-btn xpl-btn-primary" data-xpl-action="upload-here" title="Subir archivo a esta carpeta">
+              <i class="ph ph-cloud-arrow-up"></i> Subir aquí
+            </button>` : ''}
+        </div>
+      </div>
+      <div class="xpl-meta">
+        <code title="Ruta Storage">${escapeHtml(fullStoragePath)}</code>
+      </div>
+      <div class="xpl-body">
+        ${list}
+      </div>
+    </div>
+  `;
+}
+
+function renderBreadcrumb(sedeId, path) {
+  const parts = String(path).split('/').filter(Boolean);
+  const sedeLabel = ({ pamplona: 'Pamplona', rinconada: 'Rinconada', caldera: 'Caldera' })[sedeId] || sedeId;
+  const crumbs = [`<span class="xpl-crumb root"><i class="ph ph-buildings"></i> ${escapeHtml(sedeLabel)}</span>`];
+  for (const p of parts) crumbs.push(`<span class="xpl-crumb"><i class="ph ph-caret-right"></i> ${escapeHtml(p)}</span>`);
+  return crumbs.join('');
+}
+
+function renderList(files, subfolders, isAdmin) {
+  if (files.length === 0 && subfolders.length === 0) {
+    return `
+      <div class="xpl-empty xpl-empty-inline">
+        <i class="ph ph-folder-simple-dashed"></i>
+        <p class="xpl-empty-title">Carpeta vacía</p>
+        <p class="xpl-empty-sub">No hay archivos aún en esta ruta.</p>
+      </div>
+    `;
+  }
+  const subRows = subfolders.map(s => `
+    <div class="xpl-row xpl-row-folder">
+      <i class="ph-fill ph-folder xpl-icon"></i>
+      <span class="xpl-name">${escapeHtml(s.name)}</span>
+      <span class="xpl-pill">subcarpeta</span>
+    </div>
+  `).join('');
+
+  const fileRows = files.map(f => {
+    const tipo = guessTipo(f.name);
+    return `
+      <div class="xpl-row xpl-row-file"
+           data-name="${escapeAttr(f.name)}"
+           data-url="${escapeAttr(f.url || '')}"
+           data-storage-path="${escapeAttr(f.fullPath)}"
+           data-tipo="${escapeAttr(tipo)}">
+        <i class="ph ${iconForTipo(tipo)} xpl-icon"></i>
+        <div class="xpl-name-block">
+          <span class="xpl-name">${escapeHtml(f.name)}</span>
+          <span class="xpl-sub">${formatSize(f.size)} · ${formatDate(f.updated)} · ${escapeHtml(tipo.toUpperCase())}</span>
+        </div>
+        <div class="xpl-row-actions">
+          ${f.url ? `<button class="xpl-btn xpl-btn-mini" data-xpl-action="view" title="Ver">
+                       <i class="ph ph-eye"></i>
+                     </button>` : ''}
+          ${f.url ? `<a class="xpl-btn xpl-btn-mini" href="${escapeAttr(f.url)}" target="_blank" rel="noopener" title="Descargar">
+                       <i class="ph ph-download-simple"></i>
+                     </a>` : ''}
+          ${isAdmin ? `<button class="xpl-btn xpl-btn-mini xpl-btn-danger" data-xpl-action="delete" title="Eliminar">
+                         <i class="ph ph-trash"></i>
+                       </button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `<div class="xpl-list">${subRows}${fileRows}</div>`;
+}
+
+/* ═══════════════════════ ACTIONS ═══════════════════════ */
+
+function openFromCard(btn, _action) {
+  const card = btn.closest('.xpl-row-file');
+  if (!card) return;
+  const file = {
+    nombre: card.dataset.name,
+    url: card.dataset.url,
+    tipo: card.dataset.tipo,
+    storagePath: card.dataset.storagePath,
+  };
+  if (!file.url) {
+    Logger.warn?.('[file-explorer] archivo sin URL, no se puede abrir:', file.nombre);
+    return;
+  }
+  try { openViewer(file); }
+  catch (err) { Logger.error('[file-explorer] Error abriendo visor:', err); }
+}
+
+async function deleteFromCard(host, btn) {
+  const card = btn.closest('.xpl-row-file');
+  if (!card) return;
+  const name = card.dataset.name;
+  const fullPath = card.dataset.storagePath;
+  if (!confirm(`¿Eliminar "${name}"?\n\nEsta acción no se puede deshacer.`)) return;
+  try {
+    await deleteObject(storageRef(storage, fullPath));
+    Logger.info(`[file-explorer] Eliminado: ${fullPath}`);
+    if (_currentSelection) await renderPath(host, _currentSelection);
+  } catch (err) {
+    Logger.error('[file-explorer] Error eliminando:', err);
+    alert('No se pudo eliminar: ' + (err?.message || err));
+  }
+}
+
+function openUploadAtCurrentPath() {
+  if (!_currentSelection) return;
+  const { path } = _currentSelection;
+  // Pre-cargar el campo oculto del modal upload con la ruta seleccionada.
+  const hidden = document.getElementById('up-folder');
+  if (hidden) hidden.value = path;
+  // Abrir modal upload existente.
+  const btn = document.getElementById('btn-open-upload');
+  btn?.click();
+}
+
+/* ═══════════════════════ HELPERS ═══════════════════════ */
+
+function guessTipo(name) {
+  const ext = String(name).toLowerCase().split('.').pop();
+  if (['pdf'].includes(ext)) return 'pdf';
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'imagen';
+  if (['glb', 'gltf', 'obj', 'fbx'].includes(ext)) return '3d';
+  if (['skp'].includes(ext)) return 'sketchup';
+  if (['rvt', 'ifc'].includes(ext)) return 'bim';
+  if (['dwg', 'dxf'].includes(ext)) return 'cad';
+  if (['xlsx', 'xls', 'csv'].includes(ext)) return 'excel';
+  if (['mp4', 'webm', 'mov'].includes(ext)) return 'video';
+  if (['doc', 'docx'].includes(ext)) return 'documento';
+  return 'otro';
+}
+
+function iconForTipo(t) {
+  return ({
+    pdf: 'ph-file-pdf',
+    imagen: 'ph-image',
+    '3d': 'ph-cube',
+    sketchup: 'ph-cube',
+    bim: 'ph-buildings',
+    cad: 'ph-ruler',
+    excel: 'ph-file-xls',
+    video: 'ph-film-strip',
+    documento: 'ph-file-doc',
+  })[t] || 'ph-file';
+}
+
+function formatSize(bytes) {
+  if (!bytes && bytes !== 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+  } catch { return '—'; }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+/* ═══════════════════════ STYLES ═══════════════════════ */
+
+function injectStyles() {
+  if (document.getElementById('xpl-styles')) return;
+  const css = `
+    .xpl-host { display:block; padding: 0 14px 14px; }
+    .xpl-wrap { display:flex; flex-direction:column; gap:10px; padding: 12px; background: rgba(15,23,42,0.55); border:1px solid rgba(148,163,184,0.18); border-radius:10px; }
+    .xpl-header { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+    .xpl-bread { display:flex; flex-wrap:wrap; gap:4px; align-items:center; font-size:0.74rem; color:#cbd5e1; }
+    .xpl-crumb { display:inline-flex; align-items:center; gap:4px; padding: 2px 6px; border-radius:6px; background: rgba(148,163,184,0.06); font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .xpl-crumb.root { background: rgba(34,211,238,0.10); color:#67e8f9; border:1px solid rgba(34,211,238,0.22); }
+    .xpl-crumb i { color:#94a3b8; font-size:11px; }
+    .xpl-actions { display:flex; gap:6px; }
+    .xpl-btn { background: rgba(148,163,184,0.08); border:1px solid rgba(148,163,184,0.22); color:#cbd5e1; border-radius:6px; padding: 6px 10px; font-size:0.74rem; font-weight:600; display:inline-flex; align-items:center; gap:6px; cursor:pointer; text-decoration:none; }
+    .xpl-btn:hover { color:#fff; border-color: rgba(34,211,238,0.55); background: rgba(34,211,238,0.10); }
+    .xpl-btn-primary { background: linear-gradient(135deg,#06b6d4,#0284c7); border-color: transparent; color:#fff; }
+    .xpl-btn-primary:hover { filter: brightness(1.08); border-color: transparent; }
+    .xpl-btn-mini { padding: 4px 7px; font-size:0.72rem; }
+    .xpl-btn-danger { color:#fca5a5; border-color: rgba(239,68,68,0.4); }
+    .xpl-btn-danger:hover { background: rgba(239,68,68,0.14); color:#fff; border-color:#ef4444; }
+
+    .xpl-meta { font-size:0.66rem; color:#64748b; word-break: break-all; }
+    .xpl-meta code { background: transparent; color:#64748b; }
+
+    .xpl-body { display:block; }
+    .xpl-list { display:flex; flex-direction:column; gap:4px; }
+    .xpl-row { display:flex; align-items:center; gap:10px; padding: 8px 10px; border-radius:8px; background: rgba(148,163,184,0.04); border:1px solid transparent; }
+    .xpl-row:hover { background: rgba(148,163,184,0.08); border-color: rgba(148,163,184,0.18); }
+    .xpl-icon { font-size:18px; color:#94a3b8; flex: 0 0 auto; }
+    .xpl-row-folder .xpl-icon { color:#fbbf24; }
+    .xpl-row-file .xpl-icon { color:#67e8f9; }
+    .xpl-name-block { display:flex; flex-direction:column; flex:1 1 auto; min-width:0; }
+    .xpl-name { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:0.78rem; color:#e5e7eb; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .xpl-sub { font-size:0.66rem; color:#64748b; }
+    .xpl-pill { font-size:0.6rem; padding:1px 6px; border-radius:999px; background: rgba(148,163,184,0.12); color:#cbd5e1; }
+    .xpl-row-actions { display:flex; gap:4px; opacity:0.4; transition: opacity .15s; }
+    .xpl-row:hover .xpl-row-actions { opacity:1; }
+
+    .xpl-loading, .xpl-error { padding:18px; text-align:center; color:#94a3b8; font-size:0.8rem; }
+    .xpl-error { color:#fca5a5; }
+    .xpl-empty { padding: 24px 16px; text-align:center; color:#94a3b8; }
+    .xpl-empty-inline { padding: 14px; }
+    .xpl-empty i { font-size: 2.2rem; display:block; margin-bottom:6px; color:#64748b; }
+    .xpl-empty-title { font-weight:700; color:#cbd5e1; margin-bottom:2px; font-size:0.85rem; }
+    .xpl-empty-sub { font-size:0.72rem; color:#64748b; }
+  `;
+  const style = document.createElement('style');
+  style.id = 'xpl-styles';
+  style.textContent = css;
+  document.head.appendChild(style);
+}

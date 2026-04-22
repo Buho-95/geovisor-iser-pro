@@ -18,24 +18,25 @@ import {
 import {
   initGlobalView,
   showBlockView,
-  generarArbolDirectorios,
-  setupViewerDelegation,
-  setupDeleteDelegation,
   openBlockEditModal,
   closeBlockEditModal,
   saveBlockInfo
 } from './ui.js';
-import { openViewer, setupVisorButtons, setVisorFileList } from './visor.js';
+import { setupVisorButtons } from './visor.js';
 import { setupUpload } from './upload.js';
 import { initFileManager, getFileManager } from './file-manager.js';
-import { estructuraPlanimetriaISER } from './planoteca-structure.js';
-import { isStaging } from './core/env.js';
+// estructuraPlanimetriaISER ya no se usa aquí — `dashboard.js` y `upload.js`
+// la importan directamente cuando lo necesitan. La UI de planoteca legacy fue
+// reemplazada por el explorador real (components/file-explorer.js).
 import {
   setSede as setUiSede,
   setBloque as setUiBloque,
   hydrateFromLegacy as hydrateUiState,
 } from './core/ui-state.js';
 import { mountSedeSwitcher } from './components/sede-switcher.js';
+import { mountSedeSwitcherFab } from './components/sede-switcher-fab.js';
+import { mountFileExplorer } from './components/file-explorer.js';
+import { mountBlockContentView } from './modules/block-content-view.js';
 
 function doSelectBlock(id) {
   setCurrentBlock(id);
@@ -75,17 +76,14 @@ export async function bootstrap() {
 
   initLeafletMap(doSelectBlock);
 
-  // ─── Montar Sede Switcher (pill overlay sobre el mapa) ───
-  // En staging ocultamos el selector legacy del top-nav para evitar duplicados.
+  // ─── Sede Switcher (pill overlay sobre el mapa) + FAB de toggle ───
+  // El top-nav ya no existe, así que el switcher pill + el FAB son la única UI de sede.
   try {
     await hydrateUiState();
     const mapColumn = document.querySelector('.map-column');
     if (mapColumn) {
       mountSedeSwitcher(mapColumn, { initial: state?.currentSede || 'pamplona' });
-    }
-    if (isStaging) {
-      const legacyWrap = document.querySelector('[data-role="legacy-sede-selector"]');
-      if (legacyWrap) legacyWrap.style.display = 'none';
+      mountSedeSwitcherFab(mapColumn);
     }
   } catch (err) {
     Logger.warn?.('[bootstrap] No se pudo montar sede-switcher:', err);
@@ -139,72 +137,36 @@ export async function bootstrap() {
     doInitGlobalView();
   });
 
-  // ─── Sede Selector: Multi-Campus (Top Nav Bar) ───
-  const sedeSelector = document.getElementById('top-nav-sede-selector');
-  if (sedeSelector) {
-    sedeSelector.addEventListener('change', (e) => {
-      const nuevaSede = e.target.value;
-      setSede(nuevaSede);
-      // Propagar al estado UI reactivo (reset bloque + emit sede-changed).
-      try { setUiSede(nuevaSede); } catch { /* no-op */ }
-      Logger.info(`🏛️ Sede cambiada a: ${nuevaSede}`);
-
-      // 🗺️ Cambiar vista del mapa con flyTo + polígonos
-      switchSede(nuevaSede);
-
-      // Limpiar panel y volver a vista global
-      doInitGlobalView();
-
-      // Asegurar que el módulo MAPA esté activo al cambiar sede
-      activateModule('mapa');
-    });
-  }
-
-  // ─── Top Nav: Module Switching ([MAPA] | [MANTENIMIENTO] | [DASHBOARD]) ───
-  function activateModule(moduleId) {
-    // Update nav buttons
-    document.querySelectorAll('.top-nav-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.module === moduleId);
-    });
-
-    // Module view visibility
-    const appMain = document.querySelector('.app-main');
-    const panelTabs = document.querySelector('.panel-tabs');
-
-    if (moduleId === 'mapa') {
-      // Show the full 60/40 layout — activate the Visor panel tab
-      if (appMain) appMain.style.display = '';
-      if (panelTabs) panelTabs.style.display = '';
-      // Activate Visor tab
-      document.querySelectorAll('.panel-tab').forEach(b => b.classList.remove('active'));
-      document.querySelector('[data-panel="visor"]')?.classList.add('active');
-      document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
-      document.getElementById('panel-visor')?.classList.add('active');
-    } else if (moduleId === 'dashboard') {
-      // Show the full layout but activate Dashboard panel tab
-      if (appMain) appMain.style.display = '';
-      if (panelTabs) panelTabs.style.display = '';
-      document.querySelectorAll('.panel-tab').forEach(b => b.classList.remove('active'));
-      document.querySelector('[data-panel="dashboard"]')?.classList.add('active');
-      document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
-      document.getElementById('panel-dashboard')?.classList.add('active');
-    }
-  }
-
-  document.querySelectorAll('.top-nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const moduleId = btn.dataset.module;
-      if (moduleId) activateModule(moduleId);
-    });
-  });
-
+  // Top-nav eliminado: la única navegación es .panel-tabs y el sede-switcher
+  // del mapa (pill + FAB). El antiguo selector `#top-nav-sede-selector` ya no
+  // existe en el DOM; los listeners con `?.` son no-op si alguien lo busca.
+  // El botón "Volver" pertenecía a la planoteca legacy (oculta).
   document.getElementById('btn-volver')?.addEventListener('click', doInitGlobalView);
 
-  const arbolContainer = document.getElementById('arbol-carpetas-iser');
-  if (arbolContainer) {
-    setupViewerDelegation(arbolContainer, openViewer, setVisorFileList);
-    setupDeleteDelegation(arbolContainer);
-  }
+  // Reaccionar a cambios de sede vía ui-state (pill switcher) → sincronizar mapa + panel.
+  document.addEventListener('geovisor:sede-changed', (e) => {
+    const nuevaSede = e.detail?.sede;
+    if (!nuevaSede) return;
+    try { setSede(nuevaSede); } catch { /* no-op */ }
+    Logger.info(`🏛️ Sede cambiada a: ${nuevaSede}`);
+    try { switchSede(nuevaSede); } catch (err) { Logger.warn?.('switchSede falló:', err); }
+    doInitGlobalView();
+  });
+
+  // ─── Puente UI → legacy: cuando un chip de bloque (o cualquier otro
+  // emisor de ui-state) selecciona un bloque, propagamos al flujo legacy
+  // (highlight mapa + showBlockView) sin crear loop: doSelectBlock llama
+  // setUiBloque, pero ui-state hace no-op si el bloque ya es el actual.
+  document.addEventListener('geovisor:bloque-selected', (e) => {
+    const bloqueId = e.detail?.bloque;
+    if (!bloqueId) return;
+    if (state.currentBlockId === bloqueId) return; // ya sincronizado
+    try { doSelectBlock(bloqueId); }
+    catch (err) { Logger.warn?.('[bootstrap] doSelectBlock desde chip falló:', err); }
+  });
+
+  // El árbol legacy `#arbol-carpetas-iser` fue eliminado; las delegaciones
+  // de visor/delete ahora viven en file-explorer.js.
 
   setupVisorButtons();
   setupUpload();
@@ -260,78 +222,65 @@ export async function bootstrap() {
       const target = document.getElementById(`panel-${panel}`);
       if (target) target.classList.add('active');
 
-      // En STAGING: al entrar a "Base de Datos" montamos el árbol canónico (PDF).
-      if (panel === 'planoteca' && isStaging) {
-        mountStagingStructureTreeLazy();
+      // Al entrar a "Base de Datos" montamos el explorador real (árbol + archivos).
+      if (panel === 'planoteca') {
+        mountBaseDatosExplorerLazy();
       }
     });
   });
 
-  // Monta el árbol staging en el panel planoteca (reutilizando contenedores existentes).
-  // Aparece ENCIMA de la vista global heredada para no romper el flujo de producción.
-  async function mountStagingStructureTreeLazy() {
-    if (!isStaging) return;
+  // Monta el explorador de Base de Datos: árbol jerárquico (schema v3) + panel de archivos
+  // que reacciona a la selección de carpeta.
+  // Idempotente: re-mountea siempre el file-explorer (es barato y garantiza estilos);
+  // el árbol sólo se reconstruye si falta o si cambió la sede.
+  async function mountBaseDatosExplorerLazy({ force = false } = {}) {
     const panel = document.getElementById('panel-planoteca');
     if (!panel) return;
-    let host = panel.querySelector('#staging-tree-host');
-    if (!host) {
-      host = document.createElement('div');
-      host.id = 'staging-tree-host';
-      host.style.cssText = 'border-bottom:1px solid var(--border-subtle, #2a3240); margin-bottom:8px;';
-      panel.insertBefore(host, panel.firstChild);
-    }
-    if (host.dataset.mounted === 'true') return;
+    const treeHost = panel.querySelector('#explorer-tree-host');
+    const filesHost = panel.querySelector('#explorer-files-host');
+    if (!treeHost || !filesHost) return;
+
+    // 1) Garantizar el panel de archivos. Siempre se monta primero: engancha
+    //    listeners globales (`geovisor:structure-path-selected`) sobre document
+    //    pero NO toca el innerHTML del host si ya tiene contenido — por eso el
+    //    block-content-view que pintamos a continuación sobrevive al montaje.
+    try { mountFileExplorer(filesHost); }
+    catch (err) { Logger.error('[explorer] Error montando file-explorer:', err); }
+
+    // 2) Block content view: toma el host y pinta el estado actual
+    //    ("Selecciona un bloque…" o la estructura del bloque seleccionado).
+    //    Escucha BLOQUE_SELECTED / SEDE_CHANGED y sobrescribe el host
+    //    exactamente cuando corresponde.
+    try { mountBlockContentView(filesHost); }
+    catch (err) { Logger.error('[explorer] Error montando block-content-view:', err); }
+
+    // 3) Árbol izquierdo (nivel sede + chips de bloques): sólo se reconstruye
+    //    si no está montado o se fuerza (cambio de sede).
+    if (!force && treeHost.dataset.mounted === 'true') return;
     try {
-      const [{ mountStructureTree, injectStructureTreeStyles }] = await Promise.all([
-        import('./modules/structure-tree.js'),
-      ]);
+      const { mountStructureTree, injectStructureTreeStyles } = await import('./modules/structure-tree.js');
       injectStructureTreeStyles();
-      await mountStructureTree(host, { sedeId: state?.currentSede || 'pamplona' });
-      host.dataset.mounted = 'true';
+      treeHost.innerHTML = ''; // limpiar antes de remount
+      treeHost.dataset.uiListeners = ''; // permitir re-wire
+      await mountStructureTree(treeHost, { sedeId: state?.currentSede || 'pamplona' });
+      treeHost.dataset.mounted = 'true';
     } catch (err) {
-      Logger.error('❌ [staging] Error montando árbol canónico:', err);
+      Logger.error('❌ Error montando explorador de Base de Datos:', err);
     }
   }
 
-  // Escuchar selección de ruta desde el árbol staging → pre-cargar upload.
-  document.addEventListener('geovisor:structure-path-selected', (e) => {
-    const { sedeId, path } = e.detail || {};
-    Logger.info(`[staging] Ruta seleccionada en árbol: ${sedeId}/${path}`);
-    // path es "bloqueId/disciplina/..." o "nivelSedeFolder/..."
-    const parts = String(path).split('/');
-    const [bloqueOrSede, ...rest] = parts;
-    // Si el primer segmento es un bloque (existe en campusData.mapBlockId o en schema.bloques),
-    // tratarlo como selección de bloque. Si no, informativo.
-    if (state?.currentBlockId && rest.length >= 1) {
-      // Pre-cargar campo carpeta y abrir modal si el usuario es admin
-      const hidden = document.getElementById('up-folder');
-      if (hidden) hidden.value = rest.join('/');
-      const btn = document.getElementById('btn-open-upload');
-      if (btn && state.userRole === 'admin') {
-        const fm = getFileManager();
-        fm?.showNotification(`Ruta pre-cargada: ${rest.join('/')}`, 'info');
-      }
-    } else {
-      const fm = getFileManager();
-      fm?.showNotification(`Selecciona primero un bloque en el mapa para subir aquí.`, 'warning');
+  // Si la pestaña inicial es Base de Datos, montar inmediatamente.
+  const initialTab = document.querySelector('.panel-tab.active')?.dataset.panel;
+  if (initialTab === 'planoteca') mountBaseDatosExplorerLazy();
+
+  // Refrescar árbol al cambiar de sede (sede-switcher → ui-state → evento global).
+  document.addEventListener('geovisor:sede-changed', () => {
+    const host = document.getElementById('explorer-tree-host');
+    if (host) host.dataset.mounted = 'false';
+    if (document.getElementById('panel-planoteca')?.classList.contains('active')) {
+      mountBaseDatosExplorerLazy({ force: true });
     }
   });
-
-  // Si estamos en staging y la pestaña inicial ya es Base de Datos, montar inmediatamente.
-  if (isStaging) {
-    const initialTab = document.querySelector('.panel-tab.active')?.dataset.panel;
-    if (initialTab === 'planoteca') mountStagingStructureTreeLazy();
-    // Al cambiar de sede (selector legacy o pill switcher), refrescar el árbol.
-    const refreshTreeOnSede = () => {
-      const host = document.getElementById('staging-tree-host');
-      if (host) host.dataset.mounted = 'false';
-      if (document.getElementById('panel-planoteca')?.classList.contains('active')) {
-        mountStagingStructureTreeLazy();
-      }
-    };
-    document.getElementById('top-nav-sede-selector')?.addEventListener('change', refreshTreeOnSede);
-    document.addEventListener('geovisor:sede-changed', refreshTreeOnSede);
-  }
 
   // Lazy load: Mantenimiento Module
   if (document.getElementById('btn-generate-pdf')) {

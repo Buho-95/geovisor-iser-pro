@@ -20,6 +20,7 @@ import { normalizeToArray, normalizeItem } from '../core/iter-utils.js';
 import {
   getSedeActiva,
   getBloqueSeleccionado,
+  setBloque as setUiBloque,
   UI_EVENTS,
 } from '../core/ui-state.js';
 
@@ -52,9 +53,9 @@ export async function mountStructureTree(container, { sedeId } = {}) {
     // Reactividad a ui-state (se enlaza una sola vez por container).
     wireUiStateListeners(container);
 
-    // Si ya hay bloque seleccionado al montar, expandirlo.
+    // Si ya hay bloque seleccionado al montar, resaltar el chip correspondiente.
     const bloqueActual = getBloqueSeleccionado();
-    if (bloqueActual) expandBloqueInTree(host, bloqueActual);
+    if (bloqueActual) markActiveBlockChip(host, bloqueActual);
 
     // Refrescar título con el bloque actual (si lo hay).
     updateTreeTitle(container, sedeId, bloqueActual);
@@ -87,7 +88,8 @@ function wireUiStateListeners(container) {
     const host = container.querySelector(`#${TREE_ROOT_ID}`);
     if (!host) return;
     updateTreeTitle(container, sede || getSedeActiva(), bloque);
-    if (bloque) expandBloqueInTree(host, bloque);
+    // Resaltar el chip en la sección BLOQUES (nivel sede permanece intacto).
+    markActiveBlockChip(host, bloque);
   };
 
   document.addEventListener(UI_EVENTS.SEDE_CHANGED, onSede);
@@ -105,20 +107,20 @@ function updateTreeTitle(container, sedeId, bloqueId) {
   `;
 }
 
-function expandBloqueInTree(host, bloqueId) {
-  const target = host.querySelector(`details.stree-bloque[data-path="${escapeAttr(bloqueId)}"]`);
-  if (!target) return;
-  // Abrir padres (section) y el nodo.
-  let el = target;
-  while (el && el !== host) {
-    if (el.tagName === 'DETAILS') el.open = true;
-    el = el.parentElement;
+/**
+ * Marca visualmente el chip del bloque activo en la sección BLOQUES.
+ * La estructura interna del bloque NO se expande en el árbol — vive en el
+ * panel derecho (block-content-view.js).
+ */
+function markActiveBlockChip(host, bloqueId) {
+  host.querySelectorAll('.stree-block-chip.is-active')
+      .forEach(el => el.classList.remove('is-active'));
+  if (!bloqueId) return;
+  const chip = host.querySelector(`.stree-block-chip[data-bloque="${escapeAttr(bloqueId)}"]`);
+  if (chip) {
+    chip.classList.add('is-active');
+    try { chip.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { /* noop */ }
   }
-  // Highlight efímero.
-  target.classList.add('stree-highlight');
-  setTimeout(() => target.classList.remove('stree-highlight'), 1600);
-  // Scroll al nodo.
-  try { target.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { /* noop */ }
 }
 
 async function refreshTree(container, sedeId) {
@@ -190,41 +192,45 @@ function renderSede(tree, dynByParent) {
   html += `  </div>`;
   html += `</details>`;
 
-  // ── BLOQUES (negro PDF + regla verde) ───────────────────────────
+  // ── BLOQUES (selector de chips — sin profundidad en el árbol) ───
+  // La estructura interna del bloque (disciplinas / subcarpetas) ahora
+  // vive exclusivamente en el panel derecho (block-content-view.js).
+  // Aquí sólo mostramos chips clickeables; click → setUiBloque(id).
   html += `<details class="stree-section" open>`;
   html += `  <summary class="stree-section-title">`;
   html += `    <i class="ph ph-buildings"></i> BLOQUES `;
   html += `    <span class="stree-count">${bloques.length}</span>`;
   if (labCount > 0) html += `    <span class="stree-count stree-count-lab">${labCount} LAB</span>`;
   html += `  </summary>`;
-  html += `  <div class="stree-section-body">`;
-  if (bloques.length === 0) html += `<div class="stree-empty">(sin bloques)</div>`;
-  for (const b of bloques) html += renderBloque(b, dynByParent);
+  html += `  <div class="stree-section-body stree-blocks-body">`;
+  if (bloques.length === 0) {
+    html += `<div class="stree-empty">(sin bloques)</div>`;
+  } else {
+    html += `<div class="stree-block-grid">`;
+    for (const b of bloques) html += renderBlockChip(b);
+    html += `</div>`;
+    html += `<p class="stree-block-hint"><i class="ph ph-hand-pointing"></i> Selecciona un bloque para ver su estructura en el panel derecho.</p>`;
+  }
   html += `  </div>`;
   html += `</details>`;
   return html;
 }
 
-function renderBloque(b, dynByParent) {
+function renderBlockChip(b) {
   if (!b || typeof b !== 'object') return '';
   const esLab = b.tipo === 'laboratorio';
   const tipoClass = esLab ? 'is-lab' : 'is-normal';
-  const children = normalizeToArray(b.children, { label: `bloque.${b.name}.children` });
-  const badge = esLab
-    ? `<span class="stree-badge tipo-lab">LABORATORIO</span>`
-    : `<span class="stree-badge tipo-norm">NORMAL</span>`;
+  const id = b.path || b.name || '';
   return `
-    <details class="stree-node stree-bloque ${tipoClass}" data-path="${escapeAttr(b.path)}" data-kind="bloque">
-      <summary>
-        <i class="ph ph-buildings stree-icon"></i>
-        <span class="stree-name">${escapeHtml(b.name)}</span>
-        ${badge}
-        <span class="stree-count">${children.length} disciplinas</span>
-      </summary>
-      <div class="stree-children">
-        ${children.map(n => renderNode(n, 1, dynByParent)).join('')}
-      </div>
-    </details>
+    <button type="button"
+            class="stree-block-chip ${tipoClass}"
+            data-bloque="${escapeAttr(id)}"
+            data-kind="bloque"
+            title="${escapeAttr(b.name || id)}">
+      <i class="ph ph-buildings stree-chip-icon"></i>
+      <span class="stree-chip-name">${escapeHtml(b.name || id)}</span>
+      ${esLab ? '<span class="stree-chip-badge">LAB</span>' : ''}
+    </button>
   `;
 }
 
@@ -334,7 +340,55 @@ function wireInteractions(root, { sedeId, onDynamicCreated }) {
     }
   });
 
+  // Accordion: al abrir un <details> cerrar sus hermanos del mismo nivel.
+  // Aplica sólo a nodos del árbol (no a las secciones NIVEL SEDE / BLOQUES).
+  root.addEventListener('toggle', (e) => {
+    const det = e.target;
+    if (!(det instanceof HTMLDetailsElement)) return;
+    if (!det.open) return;
+    if (!det.classList.contains('stree-node')) return; // ignora .stree-section
+    const parent = det.parentElement;
+    if (!parent) return;
+    parent.querySelectorAll(':scope > details.stree-node[open]').forEach(sib => {
+      if (sib !== det) sib.open = false;
+    });
+  }, true);
+
   root.addEventListener('click', async (e) => {
+    // 0) Click sobre un chip de BLOQUE → sólo seleccionar bloque.
+    //    No expandir nada en el árbol: la estructura se renderiza en el
+    //    panel derecho vía block-content-view.js.
+    const chip = e.target.closest('.stree-block-chip');
+    if (chip) {
+      e.preventDefault();
+      e.stopPropagation();
+      const bloqueId = chip.dataset.bloque;
+      if (bloqueId) {
+        try { setUiBloque(bloqueId); } catch (err) { Logger.warn?.('[structure-tree] setUiBloque falló:', err); }
+        // Marcar como activo inmediatamente (sin esperar el evento de vuelta).
+        markActiveBlockChip(root, bloqueId);
+      }
+      return;
+    }
+
+    // 1) Click sobre una hoja completa (sin children) → emitir select.
+    //    Permite navegar como un explorador real: clic en la fila → abre archivos.
+    const leaf = e.target.closest('.stree-leaf');
+    if (leaf && !e.target.closest('[data-action]')) {
+      const leafPath = leaf.dataset.path;
+      if (leafPath) {
+        emit?.(EVENTS?.STRUCTURE_PATH_SELECTED || 'structure:path-selected', { sedeId, path: leafPath });
+        document.dispatchEvent(new CustomEvent('geovisor:structure-path-selected', {
+          detail: { sedeId, path: leafPath }
+        }));
+        // Marcar visualmente la hoja activa.
+        root.querySelectorAll('.stree-leaf.is-selected').forEach(el => el.classList.remove('is-selected'));
+        leaf.classList.add('is-selected');
+        return;
+      }
+    }
+
+    // 2) Click sobre acciones explícitas (botón target / crear dinámica).
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     e.preventDefault();
@@ -418,10 +472,58 @@ export function injectStructureTreeStyles() {
     .stree-count { font-size:0.6rem; font-weight:700; padding:1px 6px; border-radius:999px; background: rgba(148,163,184,0.12); color:#cbd5e1; letter-spacing:0.02em; text-transform:none; }
     .stree-count-lab { background: rgba(34,197,94,0.18); color:#4ade80; }
 
+    /* ── Chips de selección de BLOQUE (sin profundidad) ── */
+    .stree-blocks-body { padding: 10px 10px 8px; }
+    .stree-block-grid { display:flex; flex-direction:column; gap:6px; }
+    .stree-block-chip {
+      display:flex; align-items:center; gap:8px;
+      width:100%; text-align:left; cursor:pointer;
+      padding: 7px 10px;
+      background: rgba(15,23,42,0.35);
+      border: 1px solid rgba(148,163,184,0.16);
+      border-radius: 8px;
+      color: #cbd5e1; font: inherit; font-size: 0.78rem;
+      transition: background .18s ease, border-color .18s ease, transform .18s ease, color .18s ease;
+    }
+    .stree-block-chip:hover {
+      background: rgba(34,211,238,0.08);
+      border-color: rgba(34,211,238,0.30);
+      color:#e0f2fe;
+      transform: translateX(2px);
+    }
+    .stree-block-chip.is-active {
+      background: rgba(34,211,238,0.16);
+      border-color: rgba(34,211,238,0.60);
+      color:#fff;
+      box-shadow: inset 2px 0 0 rgba(34,211,238,0.95), 0 0 0 1px rgba(34,211,238,0.20);
+    }
+    .stree-block-chip.is-lab .stree-chip-icon { color:#4ade80; }
+    .stree-block-chip.is-normal .stree-chip-icon { color:#60a5fa; }
+    .stree-chip-icon { font-size: 15px; flex: 0 0 auto; }
+    .stree-chip-name {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      flex: 1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    .stree-chip-badge {
+      font-size:0.58rem; padding:1px 6px; border-radius:999px;
+      background: rgba(34,197,94,0.18); color:#4ade80;
+      border:1px solid rgba(34,197,94,0.28);
+      letter-spacing:0.06em; font-weight:700;
+    }
+    .stree-block-hint {
+      margin: 10px 2px 0; padding: 6px 8px;
+      color: #94a3b8; font-size: 0.68rem; line-height: 1.35;
+      display:flex; align-items:flex-start; gap:6px;
+      border-top: 1px dashed rgba(148,163,184,0.16);
+    }
+    .stree-block-hint i { color:#22d3ee; font-size:12px; margin-top:1px; }
+
     .stree-node { padding: 2px 0; }
     .stree-node > summary, .stree-leaf { list-style:none; display:flex; align-items:center; gap:6px; cursor:pointer; padding:4px 6px; border-radius:6px; user-select:none; }
     .stree-node > summary::-webkit-details-marker { display:none; }
     .stree-node > summary:hover, .stree-leaf:hover { background: rgba(148,163,184,0.08); }
+    .stree-leaf.is-selected { background: rgba(34,211,238,0.14); border:1px solid rgba(34,211,238,0.32); }
+    .stree-leaf.is-selected .stree-icon { color:#22d3ee; }
     .stree-icon { font-size:14px; opacity:0.9; }
     .stree-name { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:0.78rem; color:var(--text-primary,#e5e7eb); flex: 1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .stree-children { margin-left: 18px; border-left: 1px dashed rgba(148,163,184,0.18); padding-left: 10px; }

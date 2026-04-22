@@ -999,8 +999,9 @@ export function initGlobalView(onBlockSelect) {
   document.getElementById('detail-title').innerText = 'Sede Principal Pamplona';
   document.getElementById('detail-badge').innerText = 'Directorio General';
   document.getElementById('btn-open-upload')?.classList.add('hidden');
-  document.getElementById('view-block').classList.add('hidden');
-  document.getElementById('view-global').classList.remove('hidden');
+  // UI legacy planoteca eliminada: los siguientes IDs pueden no existir.
+  document.getElementById('view-block')?.classList.add('hidden');
+  document.getElementById('view-global')?.classList.remove('hidden');
 
   const floatingBlock = document.getElementById('map-floating-block');
   if (floatingBlock) {
@@ -1010,6 +1011,7 @@ export function initGlobalView(onBlockSelect) {
   hideBlockInfo();
 
   const list = document.getElementById('global-folder-list');
+  if (!list) return; // planoteca legacy ya no se renderiza
   list.innerHTML = '';
   const campusData = getCampusData();
   for (const [id, data] of Object.entries(campusData)) {
@@ -1494,22 +1496,21 @@ export function showBlockView(id, getArbolHTML) {
     document.getElementById('btn-open-upload')?.classList.remove('hidden');
   }
 
-  document.getElementById('view-global').classList.add('hidden');
-  document.getElementById('view-block').classList.remove('hidden');
+  // UI legacy planoteca eliminada: estos divs pueden no existir.
+  document.getElementById('view-global')?.classList.add('hidden');
+  document.getElementById('view-block')?.classList.remove('hidden');
 
-  // Generar el menú profesional de planoteca para este bloque
   const arbolContainer = document.getElementById('arbol-carpetas-iser');
-  arbolContainer.innerHTML = generarMenuPlanoteca(id);
+  if (arbolContainer) {
+    arbolContainer.innerHTML = generarMenuPlanoteca(id);
 
-  // Configurar evento para cuando se selecciona una subcarpeta
-  // Fix: remover handler anterior para evitar leak de event listeners
-  if (_subcarpetaHandler) {
-    document.removeEventListener('subcarpetaSeleccionada', _subcarpetaHandler);
+    // Listener legacy de subcarpeta sólo si el árbol legacy está presente.
+    if (_subcarpetaHandler) {
+      document.removeEventListener('subcarpetaSeleccionada', _subcarpetaHandler);
+    }
+    _subcarpetaHandler = handleSubcarpetaSeleccionada;
+    document.addEventListener('subcarpetaSeleccionada', _subcarpetaHandler);
   }
-  _subcarpetaHandler = handleSubcarpetaSeleccionada;
-  document.addEventListener('subcarpetaSeleccionada', _subcarpetaHandler);
-
-
 
   showBlockInfo(id);
 }
