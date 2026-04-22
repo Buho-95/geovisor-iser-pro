@@ -39,6 +39,7 @@ import { mountFileExplorer } from './components/file-explorer.js';
 import { mountBlockContentView } from './modules/block-content-view.js';
 import { renderDashboard, invalidateRiskSnapshot } from './modules/dashboard-view.js';
 import { clearAuditCache } from './modules/dashboard-engine.js';
+import { enhanceUploadModal } from './modules/upload-modal-enhance.js';
 
 function doSelectBlock(id) {
   setCurrentBlock(id);
@@ -172,6 +173,9 @@ export async function bootstrap() {
 
   setupVisorButtons();
   setupUpload();
+  // Unifica la experiencia del modal de subida (breadcrumb, estados,
+  // auto-cierre en éxito). No duplica listeners ni lógica de upload.
+  enhanceUploadModal();
 
   // Inicializar el gestor de archivos mejorado
   initFileManager();

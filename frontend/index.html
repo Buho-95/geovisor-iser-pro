@@ -165,9 +165,17 @@
             </div>
 
             <div class="header-actions">
-                <button type="button" id="btn-open-upload" class="btn-upload-header admin-only hidden">
+                <!--
+                  Trigger invisible para el flujo de subida.
+                  Se mantiene en el DOM porque file-explorer.js y upload.js lo usan
+                  como punto único de apertura del modal (click programático).
+                  NO debe mostrarse en el header: el flujo correcto es contextual
+                  ("Subir aquí" dentro del explorador).
+                -->
+                <button type="button" id="btn-open-upload" class="btn-upload-header legacy-hidden"
+                        aria-hidden="true" tabindex="-1" style="display:none !important;">
                     <i class="ph ph-cloud-arrow-up"></i>
-                    + Subir Plano/Archivo
+                    Subir
                 </button>
 
                 <div id="cloud-status" class="sync-badge connecting">
@@ -461,22 +469,35 @@
     <!-- ═══════════════════════════════════════════════════════
          UPLOAD MODAL — Glassmorphism
          ═══════════════════════════════════════════════════════ -->
-    <div id="upload-modal" class="modal-overlay">
+    <div id="upload-modal" class="modal-overlay modo-contextual">
         <div class="modal-upload">
             <div class="upload-header">
-                <div>
-                    <div class="upload-header-title">
-                        📦 Gestión de Carga Institucional
+                <div class="upload-header-left">
+                    <div class="upload-header-icon" aria-hidden="true">
+                        <i class="ph ph-cloud-arrow-up"></i>
                     </div>
-                    <div class="upload-header-block">
-                        <i class="ph-fill ph-map-pin"></i>
-                        Bloque Seleccionado: <span id="upload-block-name">[Nombre del Bloque]</span>
+                    <div>
+                        <div class="upload-header-title">Subir archivo</div>
+                        <div class="upload-header-sub">
+                            Se almacenará en la estructura institucional automáticamente.
+                        </div>
+                        <div class="upload-header-block legacy-hidden" aria-hidden="true">
+                            Bloque: <span id="upload-block-name">[Nombre del Bloque]</span>
+                        </div>
                     </div>
                 </div>
-                <button type="button" id="btn-cerrar-upload" class="upload-close">
+                <button type="button" id="btn-cerrar-upload" class="upload-close" aria-label="Cerrar">
                     <i class="ph ph-x"></i>
                 </button>
             </div>
+
+            <!-- Breadcrumb contextual: se rellena dinámicamente al abrir el modal. -->
+            <nav id="upload-breadcrumb" class="upload-breadcrumb" aria-label="Ruta de destino">
+                <span class="upload-breadcrumb-label">Subir archivo a:</span>
+                <ol class="upload-breadcrumb-list" id="upload-breadcrumb-list">
+                    <li class="upload-breadcrumb-item placeholder">Selecciona una carpeta desde el explorador</li>
+                </ol>
+            </nav>
 
             <div class="upload-body">
                 <form id="upload-form">
@@ -537,12 +558,43 @@
 
                     <!-- Submit -->
                     <button type="submit" id="btn-submit-upload" class="btn-upload-submit" disabled>
-                        🚀 Iniciar Carga a Firebase
+                        <i class="ph ph-upload-simple"></i>
+                        <span>Subir archivo</span>
                     </button>
                 </form>
 
                 <div class="upload-footer">
-                    Seguridad SSL Activa · Acceso Restringido para Administradores
+                    <i class="ph ph-shield-check" aria-hidden="true"></i>
+                    Se almacenará en la estructura institucional automáticamente.
+                </div>
+            </div>
+
+            <!-- Overlay de estados: carga / éxito / error. Controlado por upload-modal-enhance.js -->
+            <div id="upload-state-overlay" class="upload-state-overlay" hidden>
+                <div class="upload-state-card" role="status" aria-live="polite">
+                    <!-- Loading -->
+                    <div class="upload-state-view" data-state="loading">
+                        <i class="ph ph-circle-notch upload-state-spinner" aria-hidden="true"></i>
+                        <div class="upload-state-title">Subiendo archivo...</div>
+                        <div class="upload-state-sub">No cierres esta ventana</div>
+                    </div>
+                    <!-- Success -->
+                    <div class="upload-state-view" data-state="success" hidden>
+                        <i class="ph-fill ph-check-circle upload-state-ok" aria-hidden="true"></i>
+                        <div class="upload-state-title">Archivo subido correctamente</div>
+                        <div class="upload-state-sub">La base de datos se actualizará automáticamente</div>
+                    </div>
+                    <!-- Error -->
+                    <div class="upload-state-view" data-state="error" hidden>
+                        <i class="ph-fill ph-warning-octagon upload-state-err" aria-hidden="true"></i>
+                        <div class="upload-state-title">No se pudo subir el archivo</div>
+                        <div class="upload-state-sub" id="upload-state-error-msg">
+                            Revisa tu conexión e inténtalo de nuevo.
+                        </div>
+                        <button type="button" class="btn-upload-retry" id="btn-upload-retry">
+                            <i class="ph ph-arrow-clockwise"></i> Reintentar
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

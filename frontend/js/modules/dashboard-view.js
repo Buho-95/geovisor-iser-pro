@@ -98,14 +98,61 @@ function classifyPercent(pct) {
 
 // ── Render HTML ───────────────────────────────────────────────────
 
-function renderLoading(root, sedeId) {
-  root.innerHTML = `
+/**
+ * Semáforo global del sistema. Un vistazo ⇒ estado de la sede.
+ *   critical → hay al menos un hueco severidad 'high'
+ *   warning  → sólo huecos 'medium'
+ *   ok       → sin alertas relevantes
+ *   idle     → sin datos todavía (loading / empty-state)
+ */
+export function getGlobalStatus(global) {
+  if (!global) return 'idle';
+  if ((global.riskCritical ?? 0) > 0) return 'critical';
+  if ((global.riskMedium ?? 0) > 0) return 'warning';
+  return 'ok';
+}
+
+const STATUS_META = {
+  critical: { icon: 'ph-fill ph-warning-octagon', label: 'Riesgo crítico detectado' },
+  warning:  { icon: 'ph-fill ph-warning-circle',  label: 'Atención: huecos medios' },
+  ok:       { icon: 'ph-fill ph-check-circle',    label: 'Sistema operativo: sin riesgos' },
+  idle:     { icon: 'ph ph-circle-dashed',        label: 'Sin datos todavía' },
+};
+
+function renderSystemStatus(status) {
+  const meta = STATUS_META[status] || STATUS_META.idle;
+  return `
+    <div class="dash-system-status ${status}"
+         role="status" aria-live="polite"
+         title="${escapeHtml(meta.label)}">
+      <i class="${meta.icon}" aria-hidden="true"></i>
+      <span>${escapeHtml(meta.label)}</span>
+    </div>
+  `;
+}
+
+/**
+ * Cabecera común del dashboard. Integra el semáforo global cuando se
+ * le pasa un `global` con KPIs (omítelo en loading → muestra idle).
+ */
+function renderHead(sedeId, global) {
+  const status = getGlobalStatus(global);
+  return `
     <div class="dash-head">
       <div class="dash-head-title">
         <i class="ph ph-chart-pie-slice"></i>Auditoría de completitud
       </div>
-      <div class="dash-head-sede">${escapeHtml(sedeId)}</div>
+      <div class="dash-head-right">
+        ${renderSystemStatus(status)}
+        <div class="dash-head-sede">${escapeHtml(sedeId)}</div>
+      </div>
     </div>
+  `;
+}
+
+function renderLoading(root, sedeId) {
+  root.innerHTML = `
+    ${renderHead(sedeId, null)}
     <div class="dash-loading">
       <i class="ph ph-spinner-gap ph-spin"></i>
       <span>Analizando contenido de Storage…</span>
@@ -115,12 +162,7 @@ function renderLoading(root, sedeId) {
 
 function renderEmpty(root, sedeId, msg) {
   root.innerHTML = `
-    <div class="dash-head">
-      <div class="dash-head-title">
-        <i class="ph ph-chart-pie-slice"></i>Auditoría de completitud
-      </div>
-      <div class="dash-head-sede">${escapeHtml(sedeId)}</div>
-    </div>
+    ${renderHead(sedeId, null)}
     <div class="dash-empty">
       <i class="ph ph-info"></i>
       <span>${escapeHtml(msg)}</span>
@@ -135,12 +177,7 @@ function renderEmpty(root, sedeId, msg) {
  */
 function renderEmptyIntelligent(root, sedeId) {
   root.innerHTML = `
-    <div class="dash-head">
-      <div class="dash-head-title">
-        <i class="ph ph-chart-pie-slice"></i>Auditoría de completitud
-      </div>
-      <div class="dash-head-sede">${escapeHtml(sedeId)}</div>
-    </div>
+    ${renderHead(sedeId, null)}
     <div class="dash-empty-smart">
       <div class="dash-empty-icon">
         <i class="ph-fill ph-folder-simple-plus"></i>
@@ -514,12 +551,7 @@ export async function renderDashboard(opts = {}) {
   const cardsHtml = await renderCards(report.bloques, sedeId);
 
   root.innerHTML = `
-    <div class="dash-head">
-      <div class="dash-head-title">
-        <i class="ph ph-chart-pie-slice"></i>Auditoría de completitud
-      </div>
-      <div class="dash-head-sede">${escapeHtml(sedeId)}</div>
-    </div>
+    ${renderHead(sedeId, report.global)}
     ${renderKpis(report.global)}
     <div class="dash-grid">${cardsHtml}</div>
     ${renderAlertsBlock(report.alerts)}

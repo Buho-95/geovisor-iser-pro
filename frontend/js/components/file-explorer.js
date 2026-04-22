@@ -26,6 +26,7 @@ import {
   deleteObject,
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js';
 import { openViewer, setVisorFileList } from '../visor.js';
+import { getBloques } from '../core/structure-schema.js';
 
 const HOST_ID = 'explorer-files-host';
 const PLACEHOLDER_KEEP = '.keep';
@@ -288,6 +289,12 @@ async function deleteFromCard(host, btn) {
   try {
     await deleteObject(storageRef(storage, fullPath));
     Logger.info(`[file-explorer] Eliminado: ${fullPath}`);
+    // Emitir evento único (bootstrap lo escucha para invalidar caches del dashboard).
+    try {
+      window.dispatchEvent(new CustomEvent('geovisor:file-deleted', {
+        detail: { storagePath: fullPath, name, sedeId: _currentSelection?.sedeId || null },
+      }));
+    } catch { /* noop */ }
     if (_currentSelection) await renderPath(host, _currentSelection);
   } catch (err) {
     Logger.error('[file-explorer] Error eliminando:', err);
@@ -295,15 +302,87 @@ async function deleteFromCard(host, btn) {
   }
 }
 
+/**
+ * Abre el modal de subida con el contexto actual del explorador.
+ *
+ * IMPORTANTE: el path del explorador puede incluir el bloque canónico como
+ * primer segmento (p. ej. "05_Bloque_IA_Residencias/01_Arquitectonico/01_Modelos_2D_AutoCAD").
+ * El módulo de upload, en staging, reconstruye la ruta con
+ * `buildStoragePath({ sedeId, bloque, disciplina, subcarpeta })` usando
+ * `state.currentBlockId` como bloque. Si no normalizamos, el primer segmento
+ * (el bloque canónico) terminaría tratado como "disciplina", produciendo
+ * rutas duplicadas y archivos que NO aparecen al listar.
+ *
+ * Estabilidad (ajustes críticos):
+ *   - Flag `_uploadOpening` para evitar que un doble-click lance varias
+ *     aperturas encadenadas (cada click sintético sobre #btn-open-upload
+ *     dispara `setupFolderCascade` que toca el DOM).
+ *   - `Promise.race` con timeout de 2 s sobre `getBloques(sedeId)`: si el
+ *     schema tarda en resolver, abrimos el modal con el path tal cual,
+ *     en vez de dejar al usuario esperando indefinidamente.
+ *   - try/catch externo: cualquier fallo inesperado abre el modal igualmente
+ *     y garantiza el reset del flag (finally).
+ */
+let _uploadOpening = false;
+
 function openUploadAtCurrentPath() {
+  if (_uploadOpening) return;                    // anti-reentrada
   if (!_currentSelection) return;
-  const { path } = _currentSelection;
-  // Pre-cargar el campo oculto del modal upload con la ruta seleccionada.
-  const hidden = document.getElementById('up-folder');
-  if (hidden) hidden.value = path;
-  // Abrir modal upload existente.
-  const btn = document.getElementById('btn-open-upload');
-  btn?.click();
+  _uploadOpening = true;
+
+  // Fallback duro: si algo se cuelga (await infinito, schema no resuelve),
+  // liberamos el flag a los 2 s para no dejar la UI bloqueada.
+  const safetyTimer = setTimeout(() => {
+    if (_uploadOpening) {
+      _uploadOpening = false;
+      Logger.warn?.('[file-explorer] openUploadAtCurrentPath: fallback timeout');
+    }
+  }, 2000);
+
+  // Lanzamos el trabajo async aislado en IIFE para que el caller retorne
+  // inmediatamente (el event handler del click no queda esperando).
+  (async () => {
+    try {
+      const { sedeId, path } = _currentSelection;
+      let uploadPath = String(path || '');
+
+      try {
+        const bloquesCanonicos = await Promise.race([
+          getBloques(sedeId),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('schema-timeout')), 1500)),
+        ]);
+        const segments = uploadPath.split('/').filter(Boolean);
+        if (Array.isArray(bloquesCanonicos)
+            && segments.length
+            && bloquesCanonicos.includes(segments[0])) {
+          // Removemos el bloque del path; upload.js ya lo anida vía state.currentBlockId.
+          uploadPath = segments.slice(1).join('/');
+        }
+      } catch (err) {
+        // No bloqueamos: abrimos el modal con el path tal cual.
+        Logger.debug?.('[file-explorer] no se pudo normalizar path (continuo igual):', err?.message);
+      }
+
+      const hidden = document.getElementById('up-folder');
+      if (hidden) hidden.value = uploadPath;
+
+      const modal = document.getElementById('upload-modal');
+      if (modal) {
+        modal.dataset.source = 'explorer';
+        modal.dataset.sedeId = sedeId || '';
+        modal.dataset.path = uploadPath;
+        modal.dataset.pathOriginal = String(path || '');
+      }
+
+      const btn = document.getElementById('btn-open-upload');
+      btn?.click();
+    } catch (err) {
+      Logger.error('[file-explorer] openUploadAtCurrentPath fallo:', err);
+    } finally {
+      clearTimeout(safetyTimer);
+      _uploadOpening = false;
+    }
+  })();
 }
 
 /* ═══════════════════════ HELPERS ═══════════════════════ */

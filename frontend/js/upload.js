@@ -302,20 +302,55 @@ export function setupUpload() {
 
         fileManager?.showNotification(message, 'success');
 
+        // Emisión única del evento (bootstrap ya lo escucha para invalidar
+        // caches del dashboard y re-renderizar). El listener es idempotente,
+        // así que emitimos 1 sola vez por batch.
+        try {
+          window.dispatchEvent(new CustomEvent('geovisor:file-uploaded', {
+            detail: {
+              count: successfulUploads.length,
+              failed: failedUploads.length,
+              carpeta,
+              sedeId: state?.currentSede || null,
+              bloqueId: state?.currentBlockId || null,
+              files: successfulUploads.map(r => r.fileName),
+            },
+          }));
+        } catch { /* noop */ }
+
         // Limpiar formulario solo si todos fueron exitosos
         if (failedUploads.length === 0) {
           document.getElementById('upload-form').reset();
-          document.getElementById('upload-modal').classList.remove('activo');
+          // NOTA: el cierre del modal (classList.remove 'activo') lo hace
+          // ahora el módulo upload-modal-enhance.js tras mostrar el estado
+          // de éxito, para dar feedback visual y auto-cerrar en 1.5 s.
+          // Si el enhancer no está cargado, el listener legacy de abajo
+          // se queda dormido y el modal se cierra al siguiente click.
         }
       }
 
       if (failedUploads.length > 0) {
         fileManager?.showNotification(`${failedUploads.length} archivo(s) no pudieron subirse`, 'error');
+        try {
+          window.dispatchEvent(new CustomEvent('geovisor:file-upload-error', {
+            detail: {
+              failed: failedUploads.length,
+              success: successfulUploads.length,
+              files: failedUploads.map(r => r.fileName),
+              message: 'No se pudieron subir todos los archivos. Revisa tu conexión.',
+            },
+          }));
+        } catch { /* noop */ }
       }
 
     } catch (error) {
       console.error('Error en proceso de subida:', error);
       fileManager?.showNotification('Hubo un problema al subir. Revisa tu conexión a internet.', 'error');
+      try {
+        window.dispatchEvent(new CustomEvent('geovisor:file-upload-error', {
+          detail: { error: String(error?.message || error), message: 'Hubo un problema al subir. Revisa tu conexión.' },
+        }));
+      } catch { /* noop */ }
     } finally {
       resetUploadUI();
     }

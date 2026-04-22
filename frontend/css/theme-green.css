@@ -917,10 +917,15 @@ body.env-development #env-badge {
 
 #dashboard-audit-root .dash-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;       /* antes baseline: ahora compartimos ejes con el semáforo (pill) */
   justify-content: space-between;
   gap: 12px;
   padding: 0 2px 2px;
+}
+#dashboard-audit-root .dash-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 #dashboard-audit-root .dash-head-title {
   font-size: 14px;
@@ -1438,4 +1443,638 @@ body.env-development #env-badge {
 }
 @media (prefers-reduced-motion: reduce) {
   .leaflet-interactive.risk-high { animation: none; }
+}
+
+/* ================================================================
+   31. DASHBOARD — SEMÁFORO GLOBAL DEL SISTEMA
+   ================================================================
+   Pill compacto integrado en la cabecera. El usuario entiende el
+   estado global de la sede en un segundo.
+   Estados: critical (rojo) · warning (ámbar) · ok (verde) · idle (gris).
+   ================================================================ */
+
+#dashboard-audit-root .dash-system-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  transition: background var(--geo-t-fast) var(--geo-ease),
+              border-color var(--geo-t-fast) var(--geo-ease),
+              box-shadow var(--geo-t-fast) var(--geo-ease);
+  user-select: none;
+}
+#dashboard-audit-root .dash-system-status i { font-size: 13px; }
+
+/* Critical — domina la lectura. Pulso sólo aquí para no distraer. */
+#dashboard-audit-root .dash-system-status.critical {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.12);
+  animation: system-status-pulse 2.2s ease-in-out infinite;
+}
+#dashboard-audit-root .dash-system-status.critical i { color: #f87171; }
+
+/* Warning — visible pero menos alarmante. */
+#dashboard-audit-root .dash-system-status.warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+  border-color: rgba(245, 158, 11, 0.30);
+}
+#dashboard-audit-root .dash-system-status.warning i { color: #fbbf24; }
+
+/* Ok — estado saludable, se funde con el tema verde del sistema. */
+#dashboard-audit-root .dash-system-status.ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--geo-accent-bright);
+  border-color: rgba(34, 197, 94, 0.30);
+}
+#dashboard-audit-root .dash-system-status.ok i { color: var(--geo-accent-bright); }
+
+/* Idle — loading / sin datos. Neutro. */
+#dashboard-audit-root .dash-system-status.idle {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--geo-text-dim);
+  border-color: var(--geo-border);
+}
+#dashboard-audit-root .dash-system-status.idle i { color: var(--geo-text-dim); }
+
+@keyframes system-status-pulse {
+  0%, 100% { box-shadow: 0 2px 10px rgba(239, 68, 68, 0.12); }
+  50%      { box-shadow: 0 2px 14px rgba(239, 68, 68, 0.28); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #dashboard-audit-root .dash-system-status.critical { animation: none; }
+}
+
+/* Responsive: en panel estrecho se colapsa a sólo-icono con tooltip. */
+@media (max-width: 520px) {
+  #dashboard-audit-root .dash-system-status span { display: none; }
+  #dashboard-audit-root .dash-system-status { padding: 4px 7px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   §32. MODAL UNIFICADO DE SUBIDA (+ OTROS MODALES)
+   ───────────────────────────────────────────────────────────────────
+   Un único flujo contextual: el botón global "+ Subir Plano/Archivo"
+   está oculto permanentemente (trigger invisible que sólo usa
+   file-explorer / upload.js). La UX real vive dentro del explorador,
+   mediante "Subir aquí", y el modal muestra un breadcrumb con la
+   ruta destino, una dropzone grande, y estados de progreso/éxito/error
+   consistentes con el resto del sistema (theme verde oscuro).
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* --- Overlay del modal: glass profundo consistente con el sistema --- */
+#upload-modal.modal-overlay {
+  background: rgba(6, 18, 12, 0.68);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+}
+
+#upload-modal .modal-upload {
+  background: var(--geo-panel);
+  border: 1px solid var(--geo-border);
+  border-radius: var(--geo-radius-lg, 16px);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 2px 10px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: var(--geo-text);
+  max-width: 640px;
+  overflow: hidden;
+}
+
+/* --- Header del modal: icono + título + subtítulo --- */
+#upload-modal .upload-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px 14px;
+  background: linear-gradient(180deg,
+    rgba(34, 197, 94, 0.06) 0%,
+    rgba(34, 197, 94, 0) 100%);
+  border-bottom: 1px solid var(--geo-border);
+}
+#upload-modal .upload-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+#upload-modal .upload-header-icon {
+  width: 40px; height: 40px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  background: var(--geo-accent-hover);
+  border: 1px solid var(--geo-accent-border);
+  color: var(--geo-accent-bright);
+  font-size: 1.3rem;
+}
+#upload-modal .upload-header-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--geo-text);
+  letter-spacing: 0.2px;
+  margin-bottom: 2px;
+}
+#upload-modal .upload-header-sub {
+  font-size: 0.78rem;
+  color: var(--geo-text-dim);
+  line-height: 1.4;
+  max-width: 440px;
+}
+#upload-modal .upload-header-block.legacy-hidden { display: none !important; }
+
+#upload-modal .upload-close {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--geo-text-dim);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 160ms ease;
+}
+#upload-modal .upload-close:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+/* --- Breadcrumb contextual (la innovación clave) --- */
+#upload-modal .upload-breadcrumb {
+  padding: 10px 22px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--geo-border);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+#upload-modal .upload-breadcrumb-label {
+  color: var(--geo-text-dim);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-size: 0.68rem;
+}
+#upload-modal .upload-breadcrumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  list-style: none;
+  margin: 0; padding: 0;
+  min-width: 0;
+  flex: 1;
+}
+#upload-modal .upload-breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--geo-border);
+  color: var(--geo-text);
+  font-weight: 500;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#upload-modal .upload-breadcrumb-item i {
+  color: var(--geo-text-dim);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+#upload-modal .upload-breadcrumb-item.is-last {
+  background: var(--geo-accent-hover);
+  border-color: var(--geo-accent-border);
+  color: var(--geo-accent-bright);
+  font-weight: 600;
+}
+#upload-modal .upload-breadcrumb-item.is-last i {
+  color: var(--geo-accent-bright);
+}
+#upload-modal .upload-breadcrumb-item.placeholder {
+  background: transparent;
+  border-style: dashed;
+  color: var(--geo-text-dim);
+  font-style: italic;
+}
+#upload-modal .upload-breadcrumb-sep {
+  color: var(--geo-text-dim);
+  opacity: 0.5;
+  font-weight: 300;
+  user-select: none;
+}
+
+/* --- Cuerpo del modal --- */
+#upload-modal .upload-body {
+  padding: 18px 22px 16px;
+  background: var(--geo-panel);
+}
+
+/* Ocultamos la UI legacy de selects cuando estamos en modo contextual
+   (flujo unificado desde "Subir aquí"). Los <select> siguen en el DOM
+   porque `setupFolderCascade()` los manipula al abrir el modal. */
+#upload-modal.modo-contextual .upload-selects,
+#upload-modal.modo-contextual .upload-body > form > div[style*="margin-bottom:16px"] {
+  display: none !important;
+}
+
+/* --- Dropzone glass con borde dashed verde --- */
+#upload-modal .drop-zone {
+  background: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(34, 197, 94, 0.03) 100%);
+  border: 1.5px dashed var(--geo-accent-border);
+  border-radius: 12px;
+  padding: 32px 24px;
+  min-height: 180px;
+  color: var(--geo-text);
+  position: relative;
+  overflow: hidden;
+  transition: all 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+#upload-modal .drop-zone:hover {
+  border-color: var(--geo-accent);
+  background: linear-gradient(180deg,
+    rgba(34, 197, 94, 0.04) 0%,
+    rgba(34, 197, 94, 0.08) 100%);
+  box-shadow: 0 0 0 4px var(--geo-accent-glow);
+}
+#upload-modal .drop-zone.active,
+#upload-modal .drop-zone.dragover {
+  border-color: var(--geo-accent-bright);
+  background: linear-gradient(180deg,
+    rgba(34, 197, 94, 0.08) 0%,
+    rgba(34, 197, 94, 0.14) 100%);
+  box-shadow: 0 0 0 6px var(--geo-accent-glow),
+              inset 0 0 24px rgba(34, 197, 94, 0.15);
+  transform: scale(1.005);
+}
+#upload-modal .drop-zone.disabled {
+  opacity: 0.55;
+  border-color: var(--geo-border);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+#upload-modal .drop-zone-content i {
+  color: var(--geo-accent-bright);
+  filter: drop-shadow(0 2px 8px var(--geo-accent-glow));
+}
+#upload-modal .drop-zone-content p {
+  color: var(--geo-text);
+}
+#upload-modal .drop-zone-content .auto-note {
+  color: var(--geo-text-dim);
+  font-size: 0.74rem;
+  margin-top: 6px;
+}
+#upload-modal .drop-zone-overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 6px;
+  background: linear-gradient(135deg,
+    rgba(34, 197, 94, 0.12) 0%,
+    rgba(22, 163, 74, 0.22) 100%);
+  color: var(--geo-accent-bright);
+  border-radius: 12px;
+  backdrop-filter: blur(2px);
+}
+
+/* --- Preview de archivos --- */
+#upload-modal #file-preview {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--geo-border);
+  border-radius: 10px;
+}
+#upload-modal #file-preview h4 {
+  font-size: 0.78rem;
+  color: var(--geo-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin: 0 0 8px;
+}
+
+/* --- Barra de progreso --- */
+#upload-modal .upload-progress {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--geo-border);
+  border-radius: 10px;
+}
+#upload-modal .upload-progress-header {
+  display: flex; justify-content: space-between;
+  font-size: 0.82rem; font-weight: 500;
+  color: var(--geo-text);
+  margin-bottom: 8px;
+}
+#upload-modal #upload-percentage {
+  color: var(--geo-accent-bright);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+#upload-modal .upload-progress-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  overflow: hidden;
+}
+#upload-modal .upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #16a34a 0%, #22c55e 50%, #4ade80 100%);
+  box-shadow: 0 0 12px var(--geo-accent-glow);
+  transition: width 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 999px;
+}
+
+/* --- Botón principal "Subir archivo" --- */
+#upload-modal .btn-upload-submit {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  color: #f0fdf4;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px;
+  box-shadow:
+    0 4px 14px rgba(34, 197, 94, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transition: transform 120ms ease,
+              box-shadow 220ms ease,
+              filter 220ms ease;
+}
+#upload-modal .btn-upload-submit i { font-size: 1.05rem; }
+#upload-modal .btn-upload-submit:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow:
+    0 6px 20px var(--geo-accent-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+#upload-modal .btn-upload-submit:active:not(:disabled) {
+  transform: scale(0.97);
+}
+#upload-modal .btn-upload-submit:disabled {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--geo-text-dim);
+  box-shadow: none;
+  cursor: not-allowed;
+  border-color: var(--geo-border);
+}
+
+/* --- Footer institucional --- */
+#upload-modal .upload-footer {
+  padding: 12px 22px 16px;
+  font-size: 0.74rem;
+  color: var(--geo-text-dim);
+  text-align: center;
+  border-top: 1px solid var(--geo-border);
+  background: rgba(255, 255, 255, 0.02);
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px;
+}
+#upload-modal .upload-footer i { color: var(--geo-accent); }
+
+/* ───────── OVERLAY DE ESTADOS (loading / success / error) ───────── */
+.upload-state-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(6, 18, 12, 0.62);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border-radius: var(--geo-radius-lg, 16px);
+  z-index: 2;
+  animation: uploadStateFade 180ms ease-out;
+}
+#upload-modal .modal-upload { position: relative; }
+.upload-state-card {
+  background: var(--geo-panel);
+  border: 1px solid var(--geo-border);
+  border-radius: 12px;
+  padding: 24px 26px;
+  text-align: center;
+  min-width: 280px;
+  max-width: 420px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+.upload-state-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.upload-state-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--geo-text);
+}
+.upload-state-sub {
+  font-size: 0.82rem;
+  color: var(--geo-text-dim);
+  line-height: 1.45;
+  max-width: 320px;
+}
+
+/* Loading */
+.upload-state-spinner {
+  font-size: 2.2rem;
+  color: var(--geo-accent-bright);
+  animation: uploadSpin 900ms linear infinite;
+}
+@keyframes uploadSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .upload-state-spinner { animation: uploadSpin 2.2s linear infinite; }
+}
+
+/* Success */
+.upload-state-overlay[data-state='success'] .upload-state-card {
+  border-color: var(--geo-accent-border);
+  box-shadow:
+    0 0 0 1px var(--geo-accent-border),
+    0 18px 40px rgba(34, 197, 94, 0.18);
+}
+.upload-state-ok {
+  font-size: 2.6rem;
+  color: var(--geo-accent-bright);
+  filter: drop-shadow(0 2px 10px var(--geo-accent-glow));
+  animation: uploadSuccessPop 360ms cubic-bezier(0.2, 0.9, 0.2, 1.2);
+}
+@keyframes uploadSuccessPop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  70%  { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Error */
+.upload-state-overlay[data-state='error'] .upload-state-card {
+  background: linear-gradient(180deg,
+    rgba(239, 68, 68, 0.08) 0%,
+    var(--geo-panel) 60%);
+  border-color: rgba(239, 68, 68, 0.36);
+  box-shadow:
+    0 0 0 1px rgba(239, 68, 68, 0.28),
+    0 18px 40px rgba(239, 68, 68, 0.18);
+}
+.upload-state-err {
+  font-size: 2.4rem;
+  color: #fca5a5;
+  filter: drop-shadow(0 2px 10px rgba(239, 68, 68, 0.35));
+}
+.btn-upload-retry {
+  margin-top: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fecaca;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: all 160ms ease;
+}
+.btn-upload-retry:hover {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #fff;
+}
+.btn-upload-retry:active { transform: scale(0.97); }
+
+@keyframes uploadStateFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ───────── UNIFICACIÓN DE OTROS MODALES (visor / confirm / audit) ─────────
+   Aplicamos la misma paleta (glass verde oscuro + bordes sutiles) para
+   mantener coherencia visual entre modales sin tocar su HTML ni su JS. */
+
+/* Visor modal */
+#visor-modal.modal-overlay {
+  background: rgba(6, 18, 12, 0.68);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+}
+#visor-modal .modal-visor {
+  background: var(--geo-panel);
+  border: 1px solid var(--geo-border);
+  border-radius: var(--geo-radius-lg, 16px);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: var(--geo-text);
+}
+
+/* Confirmación de eliminación */
+.confirm-overlay {
+  background: rgba(6, 18, 12, 0.72);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+}
+.confirm-card {
+  background: var(--geo-panel);
+  border: 1px solid var(--geo-border);
+  border-radius: 14px;
+  color: var(--geo-text);
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.confirm-card h3, .confirm-card .title {
+  color: var(--geo-text);
+}
+.confirm-card p, .confirm-card .msg {
+  color: var(--geo-text-dim);
+}
+.confirm-card .btn-danger,
+.confirm-card button[data-action='confirm'] {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fef2f2;
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.22);
+}
+.confirm-card .btn-danger:hover,
+.confirm-card button[data-action='confirm']:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 6px 18px rgba(239, 68, 68, 0.32);
+}
+.confirm-card .btn-cancel,
+.confirm-card button[data-action='cancel'] {
+  background: var(--geo-panel-alt);
+  border: 1px solid var(--geo-border);
+  color: var(--geo-text);
+}
+.confirm-card .btn-cancel:hover,
+.confirm-card button[data-action='cancel']:hover {
+  background: var(--geo-accent-hover);
+  border-color: var(--geo-accent-border);
+  color: var(--geo-accent-bright);
+}
+
+/* Audit modal generado por audit-modal.js */
+#audit-modal-backdrop,
+.audit-modal-backdrop {
+  background: rgba(6, 18, 12, 0.72) !important;
+  backdrop-filter: blur(10px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(130%) !important;
+}
+.audit-modal-dialog,
+.audit-modal {
+  background: var(--geo-panel) !important;
+  border: 1px solid var(--geo-border) !important;
+  border-radius: 14px !important;
+  color: var(--geo-text) !important;
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+#audit-modal-close {
+  background: transparent !important;
+  border: 1px solid var(--geo-border) !important;
+  color: var(--geo-text-dim) !important;
+}
+#audit-modal-close:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #fca5a5 !important;
+}
+
+/* Responsive final para modal de upload */
+@media (max-width: 560px) {
+  #upload-modal .modal-upload { max-width: 96vw; }
+  #upload-modal .upload-header { padding: 14px 16px 12px; }
+  #upload-modal .upload-breadcrumb { padding: 8px 16px 10px; }
+  #upload-modal .upload-body { padding: 14px 16px; }
+  #upload-modal .upload-footer { padding: 10px 16px 12px; font-size: 0.7rem; }
+  #upload-modal .drop-zone { padding: 22px 16px; min-height: 150px; }
+  #upload-modal .upload-breadcrumb-item { max-width: 140px; }
 }
