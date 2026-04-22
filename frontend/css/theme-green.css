@@ -1156,7 +1156,7 @@ body.env-development #env-badge {
   box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.35);
 }
 #dashboard-audit-root .dash-card.is-clickable:active {
-  transform: translateY(0);
+  transform: scale(0.98);
   filter: brightness(0.98);
 }
 
@@ -1168,4 +1168,274 @@ body.env-development #env-badge {
 }
 #dashboard-audit-root .dash-alert[data-bloque]:hover {
   transform: translateX(2px);
+}
+
+/* ================================================================
+   29. DASHBOARD — EMPTY-STATE INTELIGENTE, KPI "BLOQUES COMPLETOS",
+       ALERTAS AGRUPADAS
+   ================================================================
+   - Empty-state amigable cuando la sede aún no tiene archivos.
+   - KPI "Bloques completos" con 3 estados (done/warn/empty) y el
+     subtotal discreto "/N".
+   - Grupos de alerta plegables (<details>) para mantener legible el
+     panel cuando hay mucho volumen (>12 huecos).
+   ================================================================ */
+
+/* 29.1 Empty-state inteligente ─────────────────────────────── */
+#dashboard-audit-root .dash-empty-smart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding: 48px 24px;
+  border-radius: 12px;
+  border: 1px solid var(--geo-border);
+  background: var(--geo-panel-soft);
+  backdrop-filter: blur(10px);
+  color: var(--geo-text-muted);
+  opacity: 0.95;
+}
+#dashboard-audit-root .dash-empty-icon {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at center,
+    rgba(34, 197, 94, 0.18),
+    rgba(34, 197, 94, 0.04) 65%,
+    transparent 80%);
+  color: var(--geo-accent-bright);
+  font-size: 30px;
+  margin-bottom: 4px;
+}
+#dashboard-audit-root .dash-empty-icon i { font-size: inherit; }
+#dashboard-audit-root .dash-empty-title {
+  color: var(--geo-accent-bright);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.01em;
+  margin-top: 4px;
+}
+#dashboard-audit-root .dash-empty-text {
+  color: var(--geo-text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  max-width: 420px;
+}
+
+/* 29.2 KPI "Bloques completos" — estados ────────────────────── */
+#dashboard-audit-root .dash-kpi-value.done  { color: var(--geo-accent-bright); }
+#dashboard-audit-root .dash-kpi-value.warn  { color: #fbbf24; }
+#dashboard-audit-root .dash-kpi-value.empty { color: #f87171; }
+#dashboard-audit-root .dash-kpi-sub {
+  color: var(--geo-text-dim);
+  font-size: 0.55em;
+  font-weight: 500;
+  margin-left: 4px;
+  letter-spacing: 0.02em;
+}
+
+/* 29.3 Alertas agrupadas por bloque ─────────────────────────── */
+#dashboard-audit-root .dash-alerts-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#dashboard-audit-root .dash-alert-group {
+  border-radius: 10px;
+  border: 1px solid var(--geo-border);
+  background: var(--geo-panel-soft);
+  overflow: hidden;
+  transition: border-color var(--geo-t-fast) var(--geo-ease),
+              box-shadow var(--geo-t-fast) var(--geo-ease);
+}
+#dashboard-audit-root .dash-alert-group[open] {
+  border-color: rgba(34, 197, 94, 0.18);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+/* Severidad del grupo: borde lateral coloreado */
+#dashboard-audit-root .dash-alert-group.high  { border-left: 3px solid #ef4444; }
+#dashboard-audit-root .dash-alert-group.medium{ border-left: 3px solid #f59e0b; }
+#dashboard-audit-root .dash-alert-group.low   { border-left: 3px solid #22c55e; }
+
+#dashboard-audit-root .dash-alert-sum {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  user-select: none;
+  transition: background var(--geo-t-fast) var(--geo-ease);
+}
+#dashboard-audit-root .dash-alert-sum::-webkit-details-marker { display: none; }
+#dashboard-audit-root .dash-alert-sum::marker { content: ''; }
+#dashboard-audit-root .dash-alert-sum:hover {
+  background: rgba(34, 197, 94, 0.05);
+}
+#dashboard-audit-root .dash-alert-sum .dash-alert-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--geo-text-main);
+  font-weight: 600;
+  font-size: 13px;
+}
+#dashboard-audit-root .dash-alert-sum .dash-alert-items {
+  color: var(--geo-text-dim);
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--geo-border);
+}
+/* Flecha indicadora del <details> */
+#dashboard-audit-root .dash-alert-sum::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--geo-text-dim);
+  border-bottom: 2px solid var(--geo-text-dim);
+  transform: rotate(-45deg);
+  margin-right: 2px;
+  transition: transform var(--geo-t-fast) var(--geo-ease);
+}
+#dashboard-audit-root .dash-alert-group[open] .dash-alert-sum::before {
+  transform: rotate(45deg);
+}
+
+#dashboard-audit-root .dash-alert-body {
+  padding: 4px 10px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--geo-border);
+  background: rgba(0, 0, 0, 0.12);
+}
+#dashboard-audit-root .dash-alert-body .dash-alert {
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+
+/* ================================================================
+   30. DASHBOARD — BOTÓN "VER BLOQUE", KPI "RIESGOS CRÍTICOS",
+       OVERLAY DE RIESGO EN MAPA
+   ================================================================ */
+
+/* 30.1 Acciones del grupo (chip "N pendientes" + botón "Ver bloque") */
+#dashboard-audit-root .dash-alert-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Botón "Ver bloque" dentro del <summary>.
+   stopPropagation en JS impide que toggle del <details> se dispare.
+   Estilo glass: minimalista, verde al hover. */
+#dashboard-audit-root .dash-go {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--geo-text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--geo-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background var(--geo-t-fast) var(--geo-ease),
+              color var(--geo-t-fast) var(--geo-ease),
+              border-color var(--geo-t-fast) var(--geo-ease),
+              transform var(--geo-t-fast) var(--geo-ease),
+              box-shadow var(--geo-t-fast) var(--geo-ease);
+}
+#dashboard-audit-root .dash-go i { font-size: 13px; }
+#dashboard-audit-root .dash-go:hover {
+  color: #fff;
+  background: rgba(34, 197, 94, 0.18);
+  border-color: var(--geo-accent-strong);
+  box-shadow: 0 3px 12px var(--geo-accent-glow);
+  transform: translateX(1px);
+}
+#dashboard-audit-root .dash-go:focus-visible {
+  outline: none;
+  border-color: var(--geo-accent-bright);
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.35);
+}
+#dashboard-audit-root .dash-go:active { transform: scale(0.97); }
+
+/* 30.2 KPI "Riesgos críticos" — card en modo alerta cuando hay riesgo */
+#dashboard-audit-root .dash-kpi-card.danger {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: linear-gradient(
+    180deg,
+    rgba(239, 68, 68, 0.08),
+    rgba(239, 68, 68, 0.02) 70%
+  );
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.12),
+              0 4px 14px rgba(239, 68, 68, 0.08);
+}
+#dashboard-audit-root .dash-kpi-card.danger .dash-kpi-label {
+  color: #fecaca;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+#dashboard-audit-root .dash-kpi-card.danger .dash-kpi-label i { color: #f87171; }
+#dashboard-audit-root .dash-kpi-note {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--geo-text-dim);
+  letter-spacing: 0.01em;
+}
+#dashboard-audit-root .dash-kpi-card.danger .dash-kpi-note {
+  color: rgba(254, 202, 202, 0.75);
+}
+
+/* Línea sutil bajo el valor grande — contexto técnico (ponderado vs bruto) */
+#dashboard-audit-root .dash-kpi-subtle {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--geo-text-dim);
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  opacity: 0.9;
+}
+#dashboard-audit-root .dash-kpi-subtle-val {
+  color: var(--geo-text-muted);
+  font-weight: 600;
+}
+
+/* 30.3 Overlay de riesgo del mapa — jerarquía visual
+   El color/weight/dashArray los fija Leaflet vía setStyle (map.js).
+   Aquí gradúa el glow según severidad: HIGH domina, MEDIUM acompaña.
+   Así el ojo identifica primero lo crítico, clave en uso de campo. */
+
+/* HIGH → dominante */
+.leaflet-interactive.risk-high {
+  filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.6));
+  animation: risk-pulse-high 2.4s ease-in-out infinite;
+}
+
+/* MEDIUM → más sutil */
+.leaflet-interactive.risk-medium {
+  filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.4));
+}
+
+/* Pulso suave sólo para crítico — no distrae al usuario pero capta la
+   atención periférica. Respetamos reduced-motion. */
+@keyframes risk-pulse-high {
+  0%, 100% { filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.45)); }
+  50%      { filter: drop-shadow(0 0 9px rgba(239, 68, 68, 0.75)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .leaflet-interactive.risk-high { animation: none; }
 }

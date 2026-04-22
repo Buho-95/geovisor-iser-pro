@@ -245,9 +245,16 @@ export async function auditSede(sedeId, bloques) {
   const totalComplete = audits.reduce((acc, a) => acc + a.complete, 0);
 
   // Global ponderado: agrega los pesos de todos los bloques auditados.
+  // Éste es el "índice técnico": refleja verdaderamente el estado de
+  // entregables porque las disciplinas críticas pesan más.
   const totalWeight = audits.reduce((acc, a) => acc + a.totalWeight, 0);
   const completeWeight = audits.reduce((acc, a) => acc + a.completeWeight, 0);
   const percent = totalWeight === 0 ? 0 : Math.round((completeWeight / totalWeight) * 100);
+
+  // Avance bruto: simple relación disciplinas-con-contenido / total.
+  // Útil como lectura "humana" y para contrastarlo contra el índice
+  // técnico — si hay gran diferencia es que faltan las críticas.
+  const flatPercent = totalChecks === 0 ? 0 : Math.round((totalComplete / totalChecks) * 100);
 
   const alerts = audits
     .flatMap((a) =>
@@ -267,6 +274,25 @@ export async function auditSede(sedeId, bloques) {
         (y.weight - x.weight)
     );
 
+  // KPI clave: bloques "entregables" (score ponderado ≥ 80%).
+  const bloquesCompletos = audits.filter((a) => a.percent >= 80).length;
+
+  // Riesgo agregado: cuántos huecos críticos (severity=high) hay en toda la
+  // sede. Es el número más accionable para un responsable técnico:
+  // "cuántas ausencias bloquearían la habitabilidad/entrega del bloque".
+  const riskCritical = audits.reduce(
+    (acc, a) => acc + a.missing.filter((m) => m.severity === 'high').length,
+    0
+  );
+  const riskMedium = audits.reduce(
+    (acc, a) => acc + a.missing.filter((m) => m.severity === 'medium').length,
+    0
+  );
+  // Bloques en riesgo = bloques con al menos un hueco 'high'.
+  const blocksAtRisk = audits.filter(
+    (a) => a.missing.some((m) => m.severity === 'high')
+  ).length;
+
   return {
     sede: sedeId,
     global: {
@@ -274,10 +300,53 @@ export async function auditSede(sedeId, bloques) {
       complete: totalComplete,
       totalWeight,
       completeWeight,
-      percent,
+      percent,                    // índice técnico (ponderado) — principal
+      completenessIndex: percent, // alias explícito para lecturas externas/IA
+      flatPercent,                // avance bruto sin pesos
       blocksCount: audits.length,
+      blocksComplete: bloquesCompletos,
+      blocksIncomplete: audits.length - bloquesCompletos,
+      riskCritical,
+      riskMedium,
+      blocksAtRisk,
     },
     bloques: audits,
     alerts,
+  };
+}
+
+/**
+ * Resumen compacto por bloque, pensado para alimentar a un módulo de IA
+ * (recomendaciones, priorización, redacción de auditoría normativa).
+ * No depende del DOM ni de eventos: es puro dato.
+ *
+ * @param {Awaited<ReturnType<typeof auditBloque>>} audit
+ * @returns {{
+ *   sede: string, bloque: string,
+ *   score: number,
+ *   critical: number, medium: number, low: number,
+ *   totalMissing: number,
+ *   missing: Array<{ disciplina: string, severity: string, weight: number }>
+ * }}
+ */
+export function buildAuditSummary(audit) {
+  const missing = Array.isArray(audit?.missing) ? audit.missing : [];
+  const countBy = (sev) => missing.filter((m) => m.severity === sev).length;
+  const score = audit?.percent ?? 0;
+
+  return {
+    sede: audit?.sede ?? null,
+    bloque: audit?.bloque ?? null,
+    score,
+    status: score >= 80 ? 'ok' : 'incomplete',
+    critical: countBy('high'),
+    medium: countBy('medium'),
+    low: countBy('low'),
+    totalMissing: missing.length,
+    missing: missing.map((m) => ({
+      disciplina: m.disciplina,
+      severity: m.severity,
+      weight: m.weight,
+    })),
   };
 }

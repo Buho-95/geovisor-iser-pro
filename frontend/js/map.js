@@ -56,6 +56,8 @@ export function highlightBlock(id, currentBlockId) {
       }
     }
   });
+  // Reaplica el overlay de riesgo sobre los no-seleccionados.
+  applyRiskOverlay();
 }
 
 /**
@@ -72,6 +74,8 @@ export function resetBlockStyles() {
       poly.setStyle({ fillOpacity: 0.35, weight: 2, color: baseColor, fillColor: baseColor });
     }
   });
+  // Reaplica el overlay de riesgo tras restaurar estilos base.
+  applyRiskOverlay();
 }
 
 /**
@@ -273,6 +277,8 @@ function _drawSede(sedeId, onBlockSelect) {
       if (getCurrentBlockId() !== id) {
          const currentColor = state.estadosBloques?.[id]?.color_sugerido || data.color;
          this.setStyle({ fillOpacity: 0.35, weight: 2, color: currentColor, fillColor: currentColor });
+         // Reaplica overlay de riesgo si aplica a este bloque.
+         applyRiskOverlay();
       }
       this.closeTooltip();
     });
@@ -285,3 +291,120 @@ let getCurrentBlockId = () => null;
 export function setGetCurrentBlockId(fn) {
   getCurrentBlockId = fn;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+//  OVERLAY DE RIESGO (dashboard ↔ mapa)
+// ───────────────────────────────────────────────────────────────────
+//  Escucha `geovisor:dashboard-risk` emitido por el dashboard-view.
+//  Pinta los polígonos con un borde coloreado según la severidad:
+//    high   → rojo
+//    medium → ámbar
+//    none/ok → restaura su estilo base
+//  No modifica los eventos ni el flujo existente: sólo añade estilos.
+//  Los polígonos seleccionados NO son tocados por el overlay, para
+//  no pisar el highlight del bloque activo.
+// ═══════════════════════════════════════════════════════════════════
+const blockRiskBySede = new Map();   // sedeId → Map<shortId, severity>
+let canonicalToShortId = null;       // Map<canonicalName, shortId>
+
+async function loadCanonicalIdMap() {
+  if (canonicalToShortId) return canonicalToShortId;
+  try {
+    const { loadSchema } = await import('./core/structure-schema.js');
+    const schema = await loadSchema();
+    const overrides = schema?.overrides?.sedeBloqueOverrides || {};
+    const out = new Map();
+    for (const sedeCfg of Object.values(overrides)) {
+      for (const [canonical, cfg] of Object.entries(sedeCfg || {})) {
+        if (cfg?.mapBlockId) out.set(canonical, cfg.mapBlockId);
+      }
+    }
+    canonicalToShortId = out;
+    return out;
+  } catch (err) {
+    Logger.debug?.('[map] no se pudo cargar mapping canónico→short:', err?.message);
+    canonicalToShortId = new Map();
+    return canonicalToShortId;
+  }
+}
+
+function getRiskMapForSede(sedeId) {
+  const key = sedeId || state.currentSede || 'pamplona';
+  if (!blockRiskBySede.has(key)) blockRiskBySede.set(key, new Map());
+  return blockRiskBySede.get(key);
+}
+
+/**
+ * Aplica el overlay de riesgo sobre los polígonos actuales, respetando
+ * al bloque seleccionado (no lo pisa) y dejando intactos los polígonos
+ * sin riesgo. Idempotente.
+ *
+ * Jerarquía visual (clave en uso de campo):
+ *   - HIGH:   borde rojo + stroke grueso + glow fuerte (dominante).
+ *   - MEDIUM: borde ámbar + stroke medio + glow tenue (secundario).
+ *   - NONE:   limpia las clases de riesgo si las tuviera.
+ *
+ * Para graduar el glow con CSS usamos clases reales sobre el <path> SVG
+ * interno del polígono (`poly._path`). El color/weight se siguen fijando
+ * por `setStyle` (evita depender de variables CSS no soportadas por Leaflet).
+ */
+export function applyRiskOverlay() {
+  const sedeId = state.currentSede || 'pamplona';
+  const risks = getRiskMapForSede(sedeId);
+  const currentId = getCurrentBlockId?.() || state.currentBlockId;
+
+  Object.entries(mapPolygons).forEach(([polyId, poly]) => {
+    if (!poly) return;
+    const node = poly._path || null; // SVG <path> interno de Leaflet
+    if (polyId === currentId) {
+      // No interferir con la selección; además limpiamos clases para
+      // que el bloque seleccionado no quede con glow de riesgo encima.
+      if (node) node.classList.remove('risk-high', 'risk-medium');
+      return;
+    }
+    const sev = risks.get(polyId);
+    if (!sev || sev === 'none') {
+      if (node) node.classList.remove('risk-high', 'risk-medium');
+      return;
+    }
+    const isHigh = sev === 'high';
+    const color = isHigh ? '#ef4444' : '#f59e0b';
+    try {
+      poly.setStyle({
+        color,
+        weight: isHigh ? 3 : 2,
+        dashArray: '4 4',
+      });
+      if (node) {
+        node.classList.toggle('risk-high', isHigh);
+        node.classList.toggle('risk-medium', !isHigh);
+      }
+      // Trae al frente los de severidad alta para que el ojo los capte primero.
+      if (isHigh) poly.bringToFront?.();
+    } catch { /* noop */ }
+  });
+}
+
+function handleDashboardRisk(e) {
+  const d = e.detail || {};
+  if (!d.bloque) return;
+  loadCanonicalIdMap().then((m) => {
+    const shortId = m.get(d.bloque) || d.bloque;
+    const risks = getRiskMapForSede(d.sede);
+    risks.set(shortId, d.severity || 'none');
+    // Si la sede del evento es la visible, repintamos.
+    if ((d.sede || 'pamplona') === (state.currentSede || 'pamplona')) {
+      applyRiskOverlay();
+    }
+  });
+}
+
+// Al cambiar de sede, los IDs de polígonos son otros: limpiamos el cache
+// de la sede saliente para que no quede información rancia.
+function handleSedeChanged(e) {
+  const prev = e?.detail?.prev;
+  if (prev) blockRiskBySede.delete(prev);
+}
+
+window.addEventListener('geovisor:dashboard-risk', handleDashboardRisk);
+document.addEventListener('geovisor:sede-changed', handleSedeChanged);

@@ -37,7 +37,7 @@ import { mountSedeSwitcher } from './components/sede-switcher.js';
 import { mountSedeSwitcherFab } from './components/sede-switcher-fab.js';
 import { mountFileExplorer } from './components/file-explorer.js';
 import { mountBlockContentView } from './modules/block-content-view.js';
-import { renderDashboard } from './modules/dashboard-view.js';
+import { renderDashboard, invalidateRiskSnapshot } from './modules/dashboard-view.js';
 import { clearAuditCache } from './modules/dashboard-engine.js';
 
 function doSelectBlock(id) {
@@ -307,6 +307,7 @@ export async function bootstrap() {
   //    de sede el universo de paths cambia, así que la vaciamos.
   document.addEventListener('geovisor:sede-changed', () => {
     clearAuditCache();
+    invalidateRiskSnapshot(); // fuerza re-emisión de eventos de riesgo en la nueva sede
     if (document.getElementById('panel-dashboard')?.classList.contains('active')) {
       mountDashboard();
     }
@@ -318,6 +319,8 @@ export async function bootstrap() {
   //    abra tomará los datos frescos.
   const invalidateAndMaybeRemount = () => {
     clearAuditCache();
+    invalidateRiskSnapshot(); // el snapshot puede no variar a nivel %, pero un
+                              // upload puede desbloquear un bloque crítico.
     if (document.getElementById('panel-dashboard')?.classList.contains('active')) {
       mountDashboard();
     }
@@ -345,6 +348,49 @@ export async function bootstrap() {
   // El módulo `dashboard.js` sigue disponible por si se quiere revertir;
   // sólo se quitó la llamada automática para evitar doble render en el
   // mismo `#dashboard-container`.
+
+  // ─── Pre-carga del Dashboard Inteligente (acotada) ─────────────
+  // Dos segundos después del arranque (el usuario todavía está leyendo el
+  // mapa) lanzamos una auditoría PARCIAL en background para:
+  //   • calentar la caché de listAll() del engine,
+  //   • resolver lazy-imports / JIT del renderDashboard,
+  //   • pre-cargar esBloqueConLaboratorio y el schema en memoria.
+  //
+  // Optimización: en vez de auditar toda la sede (N bloques), precargamos
+  // sólo los primeros PRELOAD_TOP_N bloques del schema. Son los que el
+  // usuario ve primero al abrir la pestaña (la grid respeta el orden).
+  // Beneficio: mismo efecto UX, menos tráfico a Storage.
+  //
+  // El render usa un <div> desechable que nunca se adjunta al DOM,
+  // así que no pinta nada. Cuando el usuario abre la tab, la auditoría
+  // completa corre con listAll ya cacheado para los N primeros bloques.
+  const PRELOAD_TOP_N = 3;
+  let dashboardPreloaded = false;
+  async function preloadDashboard() {
+    if (dashboardPreloaded) return;
+    dashboardPreloaded = true;
+    const sedeId = state?.currentSede || window.currentSedeId || 'pamplona';
+    try {
+      const { buildSedeTree } = await import('./core/structure-schema.js');
+      const tree = await buildSedeTree(sedeId);
+      const bloquesTop = Array.isArray(tree?.bloques)
+        ? tree.bloques
+            .slice(0, PRELOAD_TOP_N)
+            .map((b) => ({ name: b.name || b.path, path: b.path || b.name }))
+        : undefined;
+      const sink = document.createElement('div');
+      await renderDashboard({
+        sedeId,
+        bloques: bloquesTop,
+        mountEl: sink,
+        silent: true, // no emite eventos de riesgo con un report parcial
+      });
+    } catch (err) {
+      dashboardPreloaded = false; // permite reintentar en la apertura real
+      Logger.debug?.('[dashboard] preload falló (no crítico):', err?.message);
+    }
+  }
+  setTimeout(preloadDashboard, 2000);
 
   // Lazy load: Auditoría Normativa (Fase 2 - Dashboard)
   try {
