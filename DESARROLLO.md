@@ -310,10 +310,9 @@ Al abrir la URL staging, comprueba en la consola del navegador:
 
 ---
 
-## 9.9 Estructura canónica del Geovisor (PDF oficial) — solo en STAGING
+## 9.9 Estructura canónica del Geovisor (PDF oficial)
 
-A partir de la v1 del schema, staging contiene la **estructura jerárquica completa**
-definida en el PDF oficial *"Estructura carpetas Geovisor - ISER"*.
+El Geovisor contiene la **estructura jerárquica completa** definida en el PDF oficial *"Estructura carpetas Geovisor - ISER"*, activa tanto en Staging como en Producción.
 
 ### Schema y reglas
 
@@ -330,76 +329,81 @@ definida en el PDF oficial *"Estructura carpetas Geovisor - ISER"*.
   y `10_Historicos` permiten crear subcarpetas dinámicas con nomenclatura `NN_Nombre`
   (`^[0-9]{2}_[A-Za-z0-9_]+$`).
 
-### Colecciones Firestore (staging)
+### Colecciones Firestore
 
-| Colección | Contenido |
-|-----------|-----------|
-| `staging_estructura_base` | 1 doc por sede con el árbol completo (nivelSede + bloques). Generado por el seed. Solo lectura para usuarios; escritura restringida a admin staging. |
-| `staging_estructura_dinamica` | 1 doc por carpeta NN_Nombre creada por usuarios bajo zonas "rojas". Escritura = admin staging. |
+| Colección (Prod) | Colección (Staging) | Contenido |
+|------------------|---------------------|-----------|
+| `estructura_base` | `staging_estructura_base` | 1 doc por sede con el árbol completo (nivelSede + bloques). Generado por el seed. Solo lectura para usuarios; escritura restringida a administradores. |
+| `estructura_dinamica` | `staging_estructura_dinamica` | 1 doc por carpeta NN_Nombre creada por usuarios bajo zonas "rojas". |
 
-### Storage (staging)
+### Storage
 
-```
-staging/sedes/{sedeId}/{bloque}/{disciplina}/{subcarpeta}/archivo
-staging/sedes/{sedeId}/{nivelSedeFolder}/...
-```
+- **Producción:** `sedes/{sedeId}/{bloque}/{disciplina}/{subcarpeta}/archivo` (y `sedes/{sedeId}/{nivelSedeFolder}/...`)
+- **Staging:** `staging/sedes/{sedeId}/{bloque}/{disciplina}/{subcarpeta}/archivo` (y `staging/sedes/{sedeId}/{nivelSedeFolder}/...`)
 
-Cada nodo hoja del schema tiene un placeholder `.keep` para que la estructura sea navegable
-desde el inicio aunque no haya archivos subidos.
+Cada nodo hoja del schema tiene un placeholder `.keep` para que la estructura sea navegable desde el inicio aunque no haya archivos subidos.
 
 ### Seed inicial (obligatorio la primera vez)
 
+Para que el explorador de la planoteca funcione correctamente, es necesario inicializar el árbol de carpetas base y marcadores `.keep`.
+
+> [!TIP]
+> **Autenticación simplificada:** Los scripts de seeding y clonación (`seed-production-structure.js`, `seed-staging-structure.js`, `clone-to-staging.js`) detectan automáticamente las credenciales locales de tu máquina si has ejecutado `firebase login` previamente. Generan un archivo temporal de Application Default Credentials (ADC) bajo `.firebase/temp-adc.json` para dar acceso a las APIs de Google Cloud sin requerir descargar claves de cuentas de servicio manualmente, limpiándose automáticamente tras finalizar la tarea.
+
+#### Comandos para Staging:
 ```bash
 # Dry-run (muestra qué haría, no escribe nada)
 npm run staging:seed:dry
 
-# Aplicar (escribe Firestore + placeholders Storage)
+# Aplicar a staging (escribe Firestore + placeholders Storage)
 npm run staging:seed:apply
 
-# Solo una parte
+# Solo Firestore o Storage de staging
 npm run staging:seed:firestore
 npm run staging:seed:storage
-
-# Solo una sede
-node scripts/seed-staging-structure.js --apply --sede=pamplona
 ```
 
-El seed **aborta si detecta** que intentaría escribir en producción, y verifica que todos
-los destinos empiecen con `staging_` / `staging/`.
+#### Comandos para Producción:
+```bash
+# Dry-run (muestra qué haría, no escribe nada)
+npm run prod:seed:dry
 
-### UI en staging
+# Aplicar a producción (escribe Firestore + placeholders Storage)
+npm run prod:seed:apply
 
-- **Panel "Base de Datos"**: muestra el árbol completo de la sede activa, aplicando regla
-  verde por bloque y carpetas dinámicas. Cada nodo dinámico tiene botón "+" para crear
-  subcarpetas con validación en vivo (auto-sugiere siguiente número disponible).
-- **Selección de ruta** (botón diana): emite `geovisor:structure-path-selected` — el flujo
-  de upload queda pre-cargado con la ruta para subir archivos directo ahí.
-- **Upload en staging**: usa `buildStoragePath()` para construir
-  `staging/sedes/{sede}/{bloque}/{disciplina}/{subcarpeta}/archivo` respetando la nueva
-  jerarquía. En producción se sigue usando el path heredado, sin cambios.
-- **Metadata IA**: cada archivo subido registra en Firestore un bloque `ia: {disciplina,
-  subcarpeta, tipoArchivo, anio, entorno, schemaVersion}` listo para auditoría normativa.
+# Solo Firestore o Storage de producción
+npm run prod:seed:firestore
+npm run prod:seed:storage
+```
 
-### Módulos añadidos
+El seed de producción cuenta con validaciones de seguridad estrictas para garantizar que no se utilicen prefijos de staging en producción.
+
+### UI de la Planoteca
+
+- **Panel "Base de Datos"**: muestra el árbol completo de la sede activa, aplicando regla verde por bloque y carpetas dinámicas. Cada nodo dinámico tiene botón "+" para crear subcarpetas con validación en vivo (auto-sugiere siguiente número disponible).
+- **Selección de ruta** (botón diana): emite `geovisor:structure-path-selected` — el flujo de upload queda pre-cargado con la ruta para subir archivos directo ahí.
+- **Upload**: usa `buildStoragePath()` para construir la ruta física respetando la nueva jerarquía. Los archivos heredados se siguen cargando mediante el mapeador de compatibilidad (`fileMapper.js`) que funciona como fallback inteligente de cara al usuario.
+- **Metadata IA**: cada archivo subido registra en Firestore un bloque `ia: {disciplina, subcarpeta, tipoArchivo, anio, entorno, schemaVersion}` listo para auditoría normativa.
+
+### Módulos del Core
 
 | Archivo | Qué hace |
 |---------|----------|
 | `frontend/shared/estructura-base.json` | Schema canónico del PDF (single source of truth). |
 | `frontend/js/core/structure-schema.js` | Navegación del schema, regla verde, dynamic folders. |
 | `frontend/js/core/structure-validator.js` | Validación de nomenclatura NN_, rutas y consistencia. |
-| `frontend/js/core/storage-routing.js` | `buildStoragePath()` jerárquico por sede. |
-| `frontend/js/core/dynamic-folders-store.js` | CRUD de `staging_estructura_dinamica`. |
-| `frontend/js/modules/structure-tree.js` | UI árbol navegable (solo en staging). |
-| `frontend/js/modules/dynamic-folder-modal.js` | Modal crear carpeta NN_Nombre. |
-| `scripts/seed-staging-structure.js` | Inicializa Firestore + placeholders Storage. |
+| `frontend/js/core/storage-routing.js` | `buildStoragePath()` jerárquico por sede en todos los entornos. |
+| `frontend/js/core/dynamic-folders-store.js` | CRUD de carpetas dinámicas (`estructura_dinamica` y `staging_estructura_dinamica`). |
+| `frontend/js/modules/structure-tree.js` | UI del árbol navegable para la planoteca. |
+| `frontend/js/modules/dynamic-folder-modal.js` | Modal interactivo para crear carpeta NN_Nombre. |
+| `scripts/seed-production-structure.js` | Inicializa base de datos y Storage en producción. |
+| `scripts/seed-staging-structure.js` | Inicializa base de datos y Storage en staging. |
 
 ### Restricciones de la estructura canónica
 
 - ❌ NO se permite crear carpetas fuera del schema (solo bajo nodos con `acceptsDynamic: true`).
 - ❌ NO se aceptan nombres sin nomenclatura `NN_Nombre`.
-- ❌ Todo vive bajo `staging_*` / `staging/sedes/*` — producción no se toca.
-- ✅ La validación es activa en UI (modal) y en código (`validateFolderName`, `validatePath`,
-  `validateStoragePath`).
+- ✅ La validación es activa en UI (modal) y en código (`validateFolderName`, `validatePath`, `validateStoragePath`).
 
 ---
 
@@ -411,4 +415,3 @@ los destinos empiecen con `staging_` / `staging/`.
 | Pruebas que requieren datos reales (auditoría IA, estructura de carpetas) | `staging` |
 | Compartir una versión de prueba con otros | `staging` (URL preview) |
 | Despliegue final validado | `production` |
-
