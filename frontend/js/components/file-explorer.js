@@ -27,7 +27,7 @@ import {
   deleteObject,
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js';
 import { openViewer, setVisorFileList } from '../visor.js';
-import { getBloques } from '../core/structure-schema.js';
+import { getBloques, loadSchema } from '../core/structure-schema.js';
 
 const HOST_ID = 'explorer-files-host';
 const PLACEHOLDER_KEEP = '.keep';
@@ -161,7 +161,7 @@ async function renderPath(host, { sedeId, path }) {
   try {
     // Query canonical + legacy paths in parallel for backwards compatibility
     const folderRef = storageRef(storage, fullStoragePath);
-    const legacyPath = buildLegacyStoragePath(path);
+    const legacyPath = await buildLegacyStoragePath(sedeId, path);
     const [canonicalResult, legacyResult] = await Promise.all([
       listAll(folderRef),
       legacyPath
@@ -532,9 +532,23 @@ function openUploadAtCurrentPath() {
  * buscar archivos heredados que no están bajo la estructura canónica sedes/.
  * Retorna null si no hay path.
  */
-function buildLegacyStoragePath(path) {
+async function buildLegacyStoragePath(sedeId, path) {
   if (!path) return null;
   const prefix = STORAGE_PREFIX || '';
+  const segments = String(path).split('/').filter(Boolean);
+  if (segments.length > 0) {
+    const blockName = segments[0];
+    try {
+      const schema = await loadSchema();
+      const mapBlockId = schema?.sedes?.[sedeId]?.bloques?.[blockName]?.mapBlockId;
+      if (mapBlockId) {
+        const resolvedPath = [mapBlockId, ...segments.slice(1)].join('/');
+        return `${prefix}documentos_iser/${resolvedPath}`;
+      }
+    } catch (err) {
+      Logger.debug?.('[file-explorer] Error resolving mapBlockId for legacy path:', err?.message);
+    }
+  }
   return `${prefix}documentos_iser/${path}`;
 }
 
