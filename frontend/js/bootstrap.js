@@ -39,6 +39,7 @@ import { mountFileExplorer } from './components/file-explorer.js';
 import { mountBlockContentView } from './modules/block-content-view.js';
 import { renderDashboard, invalidateRiskSnapshot } from './modules/dashboard-view.js';
 import { clearAuditCache } from './modules/dashboard-engine.js';
+import { initDashboardPro, updateAllViews } from './modules/dashboard-pro.js';
 import { enhanceUploadModal } from './modules/upload-modal-enhance.js';
 import { installDiagnostics } from './modules/diagnostics.js';
 
@@ -219,16 +220,18 @@ export async function bootstrap() {
     }
   });
 
-  // ─── Dashboard Inteligente: monta el dashboard real (engine + view).
-  //    Limpia el host y renderiza en `#dashboard-audit-root` interno.
+  // ─── Dashboard Inteligente Pro: monta el nuevo panel unificado de control IA.
+  let dashboardProInitialized = false;
   function mountDashboard() {
-    const host = document.getElementById('dashboard-container');
-    if (!host) return;
-    const sedeId = state?.currentSede || window.currentSedeId || 'pamplona';
     try {
-      renderDashboard({ sedeId, mountEl: host });
+      if (!dashboardProInitialized) {
+        initDashboardPro();
+        dashboardProInitialized = true;
+      } else {
+        updateAllViews(state.currentBlockId);
+      }
     } catch (err) {
-      Logger.error('❌ Error montando Dashboard Inteligente:', err);
+      Logger.error('❌ Error montando Dashboard Inteligente Pro:', err);
     }
   }
 

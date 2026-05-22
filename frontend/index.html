@@ -346,39 +346,83 @@
 
                         <!-- DASHBOARD MAESTRO Tab -->
                         <div id="panel-dashboard" class="panel-content" style="padding: 1.5rem; overflow-y: auto;">
-                            <!-- Header de contol de Auditoría Oculto / Mostramos la IA en la Columna B -->
-
-                            <div class="unified-dashboard-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; align-items: start;">
+                            <div id="dashboard-control-center" class="dash-pro-container">
                                 
-                                <!-- COLUMNA A: Dashboard Analítico -->
-                                <div class="dash-col" style="background: var(--midnight-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column;">
-                                    <div id="dashboard-container" class="dashboard-wrap" style="padding: 0; min-height: 500px;"></div>
-                                </div>
+                                <!-- 1. HEADER ANALÍTICO SUPERIOR -->
+                                <header id="dashboard-pro-header" class="dash-pro-header-grid">
+                                    <!-- Rellenado dinámicamente por JS -->
+                                </header>
 
-                                <!-- COLUMNA B: Auditoría de Integridad -->
-                                <div class="dash-col" style="background: var(--midnight-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden;">
-                                    <div id="panel-auditoria-normativa" style="height: 100%;"></div>
-                                </div>
+                                <!-- 2. SEGMENT CONTROL (SELECTOR DE SECCIÓN) -->
+                                <nav class="dash-pro-tabs-nav">
+                                    <div class="dash-pro-tabs-track">
+                                        <button type="button" class="dash-pro-tab-btn active" data-dash-tab="general">
+                                            <i class="ph ph-chart-pie-slice"></i>
+                                            <span>📊 GENERAL</span>
+                                        </button>
+                                        <button type="button" class="dash-pro-tab-btn" data-dash-tab="auditoria-ia">
+                                            <i class="ph ph-shield-check"></i>
+                                            <span>🤖 AUDITORÍA IA</span>
+                                        </button>
+                                        <button type="button" class="dash-pro-tab-btn" data-dash-tab="analitica">
+                                            <i class="ph ph-chart-bar"></i>
+                                            <span>📈 ANALÍTICA</span>
+                                        </button>
+                                        <button type="button" class="dash-pro-tab-btn" data-dash-tab="reportes">
+                                            <i class="ph ph-file-pdf"></i>
+                                            <span>⚙️ REPORTES</span>
+                                        </button>
+                                    </div>
+                                </nav>
 
-                            </div>
+                                <!-- 3. CONTENEDORES DE SECCIONES MODULARES -->
+                                <main class="dash-pro-sections">
+                                    
+                                    <!-- SECCIÓN 1: GENERAL -->
+                                    <section id="dash-section-general" class="dash-pro-section active">
+                                        <div id="dashboard-container" class="dashboard-wrap" style="padding: 0;"></div>
+                                        <div id="dashboard-timeline-container" class="dash-pro-card mt-4"></div>
+                                    </section>
 
-                            <!-- SECCIÓN INFERIOR -->
-                            <div class="dash-footer-full" style="background: var(--midnight-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 1.5rem;">
-                                <div id="audit-tasks-container-wide">
-                                    <!-- Auditoria.js insertará aquí las tareas pendientes si modificamos su JS, 
-                                         o las dejará en su card. Si el usuario las quiere a ancho completo, 
-                                         debemos aislar el div de tareas. -->
-                                </div>
-                                <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid var(--border-subtle); padding-top: 1.5rem;">
-                                    <button type="button" id="btn-generate-pdf" class="mant-btn mant-btn-pdf admin-only" disabled style="max-width: 300px; margin: 0;">
-                                        <i class="ph ph-file-pdf"></i> Generar Reporte de Gestión (PDF)
-                                    </button>
-                                </div>
-                            </div>
+                                    <!-- SECCIÓN 2: AUDITORÍA IA -->
+                                    <section id="dash-section-auditoria-ia" class="dash-pro-section">
+                                        <div id="panel-auditoria-normativa" style="height: 100%;"></div>
+                                        <div id="dashboard-ai-evidences-container" class="dash-pro-card mt-4"></div>
+                                        <div id="dashboard-ai-heatmap-container" class="dash-pro-card mt-4"></div>
+                                    </section>
 
-                            <!-- HISTORIAL DE REPORTES -->
-                            <div class="dash-footer-full" style="background: var(--midnight-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 1.5rem; margin-top: 1.5rem;">
-                                <div id="report-history-container"></div>
+                                    <!-- SECCIÓN 3: ANALÍTICA -->
+                                    <section id="dash-section-analitica" class="dash-pro-section">
+                                        <div id="dashboard-analytics-container" class="dash-pro-card"></div>
+                                    </section>
+
+                                    <!-- SECCIÓN 4: REPORTES -->
+                                    <section id="dash-section-reportes" class="dash-pro-section">
+                                        <!-- Botones de generación de reporte y auditoría global -->
+                                        <div class="dash-pro-card dash-pro-flex-between">
+                                            <div>
+                                                <h4 style="margin:0 0 6px 0; font-size:1.05rem; font-weight:700; color: var(--geo-text);">Generar Reporte Oficial PDF</h4>
+                                                <p style="margin:0; font-size:0.8rem; color:var(--geo-text-muted);">Crea un informe detallado con todo el inventario, análisis y diagnóstico de IA del bloque.</p>
+                                            </div>
+                                            <button type="button" id="btn-generate-pdf" class="mant-btn mant-btn-pdf admin-only" disabled style="max-width: 300px; margin: 0;">
+                                                <i class="ph ph-file-pdf"></i> Generar Reporte (PDF)
+                                            </button>
+                                        </div>
+                                        
+                                        <!-- Tareas Pendientes Detectadas - ahora en esta pestaña para orden lógico -->
+                                        <div class="dash-pro-card mt-4">
+                                            <div id="audit-tasks-container-wide"></div>
+                                        </div>
+
+                                        <!-- Historial de Reportes -->
+                                        <div class="dash-pro-card mt-4">
+                                            <h4 style="margin:0 0 16px 0; font-size:1.05rem; font-weight:700; color: var(--geo-text);">Bitácora de Auditorías Anteriores</h4>
+                                            <div id="report-history-container"></div>
+                                        </div>
+                                    </section>
+
+                                </main>
+
                             </div>
                         </div>
                     </div>
