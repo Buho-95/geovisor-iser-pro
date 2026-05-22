@@ -17,6 +17,7 @@
 import { Logger } from '../core/logger.js';
 import { state } from '../core/state.js';
 import { buildStoragePath } from '../core/storage-routing.js';
+import { STORAGE_PREFIX } from '../core/paths.js';
 import { storage } from '../services/firebase.js';
 import {
   ref as storageRef,
@@ -158,11 +159,32 @@ async function renderPath(host, { sedeId, path }) {
   host.innerHTML = renderShell({ sedeId, path, fullStoragePath, loading: true });
 
   try {
+    // Query canonical + legacy paths in parallel for backwards compatibility
     const folderRef = storageRef(storage, fullStoragePath);
-    const result = await listAll(folderRef);
+    const legacyPath = buildLegacyStoragePath(path);
+    const [canonicalResult, legacyResult] = await Promise.all([
+      listAll(folderRef),
+      legacyPath
+        ? listAll(storageRef(storage, legacyPath)).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    // Merge items from both paths, deduplicating by filename (canonical wins)
+    let mergedItems = [...(canonicalResult.items || [])];
+    let mergedPrefixes = [...(canonicalResult.prefixes || [])];
+    if (legacyResult) {
+      const existingNames = new Set(mergedItems.map(it => it.name));
+      for (const it of (legacyResult.items || [])) {
+        if (!existingNames.has(it.name)) mergedItems.push(it);
+      }
+      const existingPrefixNames = new Set(mergedPrefixes.map(p => p.name));
+      for (const p of (legacyResult.prefixes || [])) {
+        if (!existingPrefixNames.has(p.name)) mergedPrefixes.push(p);
+      }
+    }
 
     // Filtrar placeholders .keep que el seed crea para mantener carpetas vacías visibles.
-    const items = (result.items || []).filter(it => it.name !== PLACEHOLDER_KEEP);
+    const items = mergedItems.filter(it => it.name !== PLACEHOLDER_KEEP);
 
     // Resolver metadata + URL en paralelo (con tolerancia a fallos individuales).
     const files = await Promise.all(items.map(async (it) => {
@@ -191,7 +213,7 @@ async function renderPath(host, { sedeId, path }) {
       return String(a.name).localeCompare(String(b.name));
     });
 
-    const subfolders = (result.prefixes || []).map(p => ({ name: p.name }));
+    const subfolders = mergedPrefixes.map(p => ({ name: p.name }));
     host.innerHTML = renderShell({ sedeId, path, fullStoragePath, files, subfolders });
     // Actualizar lista de navegación del visor para flechas prev/next.
     try {
@@ -501,6 +523,19 @@ function openUploadAtCurrentPath() {
       _uploadOpening = false;
     }
   })();
+}
+
+/* ═══════════════════════ LEGACY PATH BUILDER ═══════════════════════ */
+
+/**
+ * Construye la ruta de Storage legada (documentos_iser/{path}) para
+ * buscar archivos heredados que no están bajo la estructura canónica sedes/.
+ * Retorna null si no hay path.
+ */
+function buildLegacyStoragePath(path) {
+  if (!path) return null;
+  const prefix = STORAGE_PREFIX || '';
+  return `${prefix}documentos_iser/${path}`;
 }
 
 /* ═══════════════════════ HELPERS ═══════════════════════ */

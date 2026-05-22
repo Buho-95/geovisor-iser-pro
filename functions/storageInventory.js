@@ -5,9 +5,12 @@ const { computeInventoryFingerprint } = require('./inventoryHash');
 const { withStoragePath } = require('./envNamespace');
 
 const STORAGE_BASE = 'documentos_iser';
+const CANONICAL_BASE = 'sedes';
+const PLACEHOLDER_KEEP = '.keep';
 
 /**
  * Lista recursiva vía Admin SDK (sin listAll en cliente).
+ * Filtra archivos .keep placeholder usados por los scripts de seeding.
  */
 async function scanPrefix(prefix, blockId, blockName, sede, basePathLabel) {
   const bucket = admin.storage().bucket();
@@ -24,6 +27,10 @@ async function scanPrefix(prefix, blockId, blockName, sede, basePathLabel) {
     const rel = full.startsWith(prefix) ? full.substring(prefix.length) : full;
     const segments = rel.split('/').filter(Boolean);
     const nombre = segments.pop() || full.split('/').pop();
+
+    // Skip .keep placeholder files created by seed scripts
+    if (nombre === PLACEHOLDER_KEEP) continue;
+
     const folderParts = segments;
     const carpeta = folderParts.length ? folderParts.join('/') : 'raíz';
 
@@ -75,7 +82,12 @@ async function scanPrefix(prefix, blockId, blockName, sede, basePathLabel) {
 }
 
 /**
- * Intenta rutas conocidas (actual + legado) y devuelve el primer inventario no vacío.
+ * Escanea AMBAS rutas (canónica sedes/ y legado documentos_iser/) y devuelve
+ * un inventario fusionado y deduplicado.
+ *
+ * Prioridad: archivos en la ruta canónica prevalecen sobre los legados
+ * cuando existe colisión por carpeta/nombre.
+ *
  * @param {string} blockId
  * @param {string} blockName
  * @param {string} sede
@@ -84,35 +96,94 @@ async function scanPrefix(prefix, blockId, blockName, sede, basePathLabel) {
 async function buildInventoryForBlock(blockId, blockName, sede, env) {
   const s = sede || 'pamplona';
   const nsEnv = env || 'production';
-  const base = withStoragePath(nsEnv, STORAGE_BASE);
+  const legacyBase = withStoragePath(nsEnv, STORAGE_BASE);
+  const canonicalBase = withStoragePath(nsEnv, CANONICAL_BASE);
 
-  const attempts = [
-    { prefix: `${base}/${blockId}/`, label: `${base}/${blockId}` },
-    { prefix: `${base}/${s}/${blockId}/`, label: `${base}/${s}/${blockId}` },
+  // 1. Scan canonical path (sedes/{sede}/{blockId}/)
+  const canonicalPrefix = `${canonicalBase}/${s}/${blockId}/`;
+  const canonicalInv = await scanPrefix(
+    canonicalPrefix, blockId, blockName || blockId, s,
+    `${canonicalBase}/${s}/${blockId}`
+  );
+
+  // 2. Scan legacy paths (documentos_iser/{blockId}/, etc.)
+  const legacyAttempts = [
+    { prefix: `${legacyBase}/${blockId}/`, label: `${legacyBase}/${blockId}` },
+    { prefix: `${legacyBase}/${s}/${blockId}/`, label: `${legacyBase}/${s}/${blockId}` },
   ];
   if (blockName && blockName !== blockId) {
-    attempts.push({ prefix: `${base}/${blockName}/`, label: `${base}/${blockName}` });
+    legacyAttempts.push({
+      prefix: `${legacyBase}/${blockName}/`,
+      label: `${legacyBase}/${blockName}`,
+    });
   }
 
-  let lastEmpty = null;
-  for (const a of attempts) {
+  let legacyInv = null;
+  for (const a of legacyAttempts) {
     const inv = await scanPrefix(a.prefix, blockId, blockName || blockId, s, a.label);
     inv.env = nsEnv;
-    if (inv.totalArchivos > 0) return inv;
-    lastEmpty = inv;
+    if (inv.totalArchivos > 0) { legacyInv = inv; break; }
   }
-  return lastEmpty || {
+
+  // 3. Merge results
+  const hasCanonical = canonicalInv.totalArchivos > 0;
+  const hasLegacy = legacyInv && legacyInv.totalArchivos > 0;
+
+  if (hasCanonical && hasLegacy) {
+    return mergeInventories([canonicalInv, legacyInv], blockId, blockName, s, nsEnv);
+  }
+  if (hasCanonical) { canonicalInv.env = nsEnv; return canonicalInv; }
+  if (hasLegacy)    { legacyInv.env = nsEnv; return legacyInv; }
+
+  // Empty: no files found in either path
+  return {
     blockId,
     blockName: blockName || blockId,
     sede: s,
     env: nsEnv,
-    basePath: `${base}/${blockId}`,
+    basePath: `${canonicalBase}/${s}/${blockId}`,
     archivos: [],
     subcarpetas: [],
     totalArchivos: 0,
     scanTimestamp: new Date().toISOString(),
     archivoHash: '0:',
   };
+}
+
+/**
+ * Fusiona múltiples inventarios deduplicando por carpeta/nombre.
+ * El primer inventario (canónico) tiene prioridad en caso de colisión.
+ */
+function mergeInventories(inventories, blockId, blockName, sede, env) {
+  const seen = new Map();
+  const allSubcarpetas = new Set();
+
+  for (const inv of inventories) {
+    for (const f of (inv.archivos || [])) {
+      const key = `${f.carpeta || ''}/${f.nombre}`;
+      if (!seen.has(key)) {
+        seen.set(key, f);
+      }
+    }
+    for (const sc of (inv.subcarpetas || [])) {
+      allSubcarpetas.add(sc);
+    }
+  }
+
+  const archivos = Array.from(seen.values());
+  const merged = {
+    blockId,
+    blockName: blockName || blockId,
+    sede,
+    env,
+    basePath: inventories[0].basePath,
+    archivos,
+    subcarpetas: Array.from(allSubcarpetas),
+    totalArchivos: archivos.length,
+    scanTimestamp: new Date().toISOString(),
+  };
+  merged.archivoHash = computeInventoryFingerprint(merged);
+  return merged;
 }
 
 module.exports = { buildInventoryForBlock, STORAGE_BASE };
