@@ -45,6 +45,12 @@
     "staging:seed:storage": "node scripts/seed-staging-structure.js --apply --only=storage",
     "staging:seed:clear": "node scripts/seed-staging-structure.js --apply --clear",
     "staging:seed:reset": "node scripts/seed-staging-structure.js --apply --clear",
+    "prod:seed:dry": "node scripts/seed-production-structure.js",
+    "prod:seed:apply": "node scripts/seed-production-structure.js --apply",
+    "prod:seed:firestore": "node scripts/seed-production-structure.js --apply --only=firestore",
+    "prod:seed:storage": "node scripts/seed-production-structure.js --apply --only=storage",
+    "prod:seed:clear": "node scripts/seed-production-structure.js --apply --clear",
+    "prod:seed:reset": "node scripts/seed-production-structure.js --apply --clear",
     "deploy:firebase": "npm run sync-config && firebase deploy --only hosting,functions,firestore,storage --project geovisor-iser",
     "deploy:prod": "npm run deploy:firebase"
   },

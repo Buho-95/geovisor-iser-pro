@@ -44,6 +44,14 @@ service firebase.storage {
       allow write: if isAdmin();
     }
 
+    // Árbol jerárquico por sede (PDF oficial) — estructura completa en producción.
+    // Permite upload controlado por la UI (modal sede→bloque→disciplina→subcarpeta).
+    match /sedes/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+
     // ═══════════════════════════════════════════════════════════════
     // STAGING — mismas reglas aplicadas a staging/* (aislamiento total)
     // ═══════════════════════════════════════════════════════════════

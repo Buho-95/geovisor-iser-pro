@@ -20,7 +20,6 @@ import {
 import { state } from './state.js';
 import { validateFolderName } from './structure-validator.js';
 import { isDynamicFolder, nextDynamicNumber } from './structure-schema.js';
-import { isStaging } from './env.js';
 import { normalizeToArray } from './iter-utils.js';
 
 const COL = COLLECTIONS.ESTRUCTURA_DINAMICA; // resuelta por paths.js en staging
@@ -33,7 +32,6 @@ function sanitizeDocId(parentPath, nombre) {
  * @returns {Promise<Array<{sedeId, parentPath, nombre, path, numero, creadoPor, creadoEn}>>}
  */
 export async function listDynamicFolders(sedeId) {
-  if (!isStaging) return [];
   try {
     const q = query(collection(db, COL), where('sedeId', '==', sedeId));
     const snap = await getDocs(q);
@@ -53,7 +51,6 @@ export async function listDynamicFolders(sedeId) {
  * @param {string[]} [opts.existingSiblings]   nombres ya usados en este nivel (para auto-sugerir)
  */
 export async function createDynamicFolder({ sedeId, parentPath, nombre, existingSiblings = [] }) {
-  if (!isStaging) throw new Error('Las carpetas dinámicas solo existen en STAGING.');
   if (!sedeId || !parentPath || !nombre) throw new Error('sedeId, parentPath y nombre son obligatorios.');
 
   const canCreate = await isDynamicFolder(sedeId, parentPath);
@@ -83,7 +80,6 @@ export async function createDynamicFolder({ sedeId, parentPath, nombre, existing
 }
 
 export async function deleteDynamicFolder({ sedeId, parentPath, nombre }) {
-  if (!isStaging) throw new Error('Operación solo disponible en STAGING.');
   const id = sanitizeDocId(parentPath, nombre);
   await deleteDoc(doc(db, COL, id));
 }

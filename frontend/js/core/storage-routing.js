@@ -60,7 +60,8 @@ export function validateStoragePath({ bloque, disciplina, subcarpeta } = {}) {
   return { ok: true };
 }
 
-/** Flag de conveniencia para UI. */
+/** Flag de conveniencia para UI. Activo en todos los entornos para unificación. */
 export function isJerarquiaPorSedeActiva() {
-  return isStaging;
+  return true;
 }
+

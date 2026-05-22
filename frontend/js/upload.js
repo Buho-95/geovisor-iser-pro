@@ -11,7 +11,7 @@ import { isAdmin } from './services/auth.js';
 import { getFileManager } from './file-manager.js';
 import { estructuraPlanimetriaISER, formatearNombreCarpeta } from './planoteca-structure.js';
 import { isStaging } from './core/env.js';
-import { buildStoragePath, validateStoragePath } from './core/storage-routing.js';
+import { buildStoragePath, validateStoragePath, isJerarquiaPorSedeActiva } from './core/storage-routing.js';
 import { resolveBloqueCanonical } from './core/structure-schema.js';
 import { logUploadPath, logUploadDone } from './modules/diagnostics.js';
 
@@ -387,7 +387,7 @@ async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
   // Jerarquía staging (PDF oficial): staging/sedes/{sede}/{bloque}/{disciplina}/{sub}/archivo
   // Producción: ruta heredada {storageBasePath}/{bloqueId}/{carpeta}/archivo
   let rutaStorage;
-  if (isStaging) {
+  if (isJerarquiaPorSedeActiva()) {
     // `carpeta` viene con formato "Disciplina/Subcarpeta[/Sub2]"
     const [disciplina, ...restoSub] = String(carpeta).split('/').filter(Boolean);
     const subcarpeta = restoSub.join('/') || undefined;
