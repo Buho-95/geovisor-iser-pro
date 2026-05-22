@@ -60,8 +60,78 @@ function loadSchema() {
   ));
 }
 
+let tempAdcPath = null;
+function cleanupAdc() {
+  if (tempAdcPath && fs.existsSync(tempAdcPath)) {
+    try {
+      fs.unlinkSync(tempAdcPath);
+      console.log('   [auth] Credencial temporal limpia (.firebase/temp-adc.json)');
+    } catch (e) {
+      // Ignorar error al limpiar
+    }
+    tempAdcPath = null;
+  }
+}
+
+// Registrar manejadores para asegurar la limpieza del archivo temporal
+process.on('exit', cleanupAdc);
+process.on('SIGINT', () => { cleanupAdc(); process.exit(130); });
+process.on('SIGTERM', () => { cleanupAdc(); process.exit(143); });
+process.on('uncaughtException', (err) => {
+  console.error('[SEED] Excepción no controlada:', err);
+  cleanupAdc();
+  process.exit(1);
+});
+
 function initAdmin() {
   if (admin.apps.length) return;
+
+  // 1) Si hay GOOGLE_APPLICATION_CREDENTIALS, firebase-admin la usará automáticamente.
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    console.log('   [auth] Usando GOOGLE_APPLICATION_CREDENTIALS existente');
+    admin.initializeApp({ projectId: PROJECT_ID, storageBucket: BUCKET_NAME });
+    return;
+  }
+
+  // 2) Leer refresh token del Firebase CLI (firebase-tools.json)
+  const home = process.env.USERPROFILE || process.env.HOME || '';
+  const configPath = path.join(home, '.config', 'configstore', 'firebase-tools.json');
+  if (!fs.existsSync(configPath)) {
+    console.error('[SEED] No se encontraron credenciales.');
+    console.error('       Opciones:');
+    console.error('         1) firebase login (y reintentar)');
+    console.error('         2) set GOOGLE_APPLICATION_CREDENTIALS=C:\\ruta\\service-account.json');
+    process.exit(1);
+  }
+
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const refreshToken = config.tokens && config.tokens.refresh_token;
+  if (!refreshToken) {
+    console.error('[SEED] firebase-tools.json no contiene refresh_token. Ejecuta: firebase login --reauth');
+    process.exit(1);
+  }
+
+  // Client ID/Secret públicos del Firebase CLI
+  const FIREBASE_CLI_CLIENT_ID     = '563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com';
+  const FIREBASE_CLI_CLIENT_SECRET = 'j9iVZfS8kkCEFUPaAeJV0sAi';
+
+  const adc = {
+    client_id: FIREBASE_CLI_CLIENT_ID,
+    client_secret: FIREBASE_CLI_CLIENT_SECRET,
+    refresh_token: refreshToken,
+    type: 'authorized_user'
+  };
+
+  const dotFirebaseDir = path.join(__dirname, '..', '.firebase');
+  if (!fs.existsSync(dotFirebaseDir)) {
+    fs.mkdirSync(dotFirebaseDir, { recursive: true });
+  }
+
+  tempAdcPath = path.join(dotFirebaseDir, 'temp-adc.json');
+  fs.writeFileSync(tempAdcPath, JSON.stringify(adc, null, 2));
+
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = tempAdcPath;
+  console.log('   [auth] Generado ADC temporal a partir de Firebase CLI');
   admin.initializeApp({ projectId: PROJECT_ID, storageBucket: BUCKET_NAME });
 }
 
