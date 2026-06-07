@@ -17,7 +17,7 @@ const { createClient } = require('../backend-cloudrun/node_modules/@supabase/sup
 const admin = require('../functions/node_modules/firebase-admin');
 
 // Configuración de Supabase provista por el usuario
-const SUPABASE_URL = 'https://scglhxbysycuqqzgzxhe.supabase.co';
+const SUPABASE_URL = 'https://scglhxbysycuqqzgqzxe.supabase.co';
 const SUPABASE_SERVICE_ROLE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjZ2xoeGJ5c3ljdXFxemdxenhlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDgyMzc2NiwiZXhwIjoyMDk2Mzk5NzY2fQ.JFTNBI1dGSX62SehW7xJ6rKorxVq6OKRWJQwF0pwWGo';
 
 const isDryRun = !process.argv.includes('--apply');

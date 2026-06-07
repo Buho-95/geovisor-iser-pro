@@ -75,7 +75,7 @@ Write-Host ""
 Write-Host "Iniciando el despliegue del contenedor en Cloud Run..." -ForegroundColor Cyan
 Write-Host "Esto compilará el código local de backend-cloudrun en la nube y lo desplegará." -ForegroundColor Yellow
 
-$supabaseUrl = "https://scglhxbysycuqqzgzxhe.supabase.co"
+$supabaseUrl = "https://scglhxbysycuqqzgqzxe.supabase.co"
 $supabaseServiceKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjZ2xoeGJ5c3ljdXFxemdxenhlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDgyMzc2NiwiZXhwIjoyMDk2Mzk5NzY2fQ.JFTNBI1dGSX62SehW7xJ6rKorxVq6OKRWJQwF0pwWGo"
 
 & gcloud run deploy geovisor-iser-backend `

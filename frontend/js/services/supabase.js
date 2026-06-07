@@ -9,7 +9,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 // Configuración de Supabase (leída de config.js)
-const SUPABASE_URL = 'https://scglhxbysycuqqzgzxhe.supabase.co';
+const SUPABASE_URL = 'https://scglhxbysycuqqzgqzxe.supabase.co';
 // Clave anon/public de Supabase (acceso controlado por RLS en el lado servidor)
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjZ2xoeGJ5c3ljdXFxemdxenhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MjM3NjYsImV4cCI6MjA5NjM5OTc2Nn0.NqDjxhXnRXOWKeykQO8szLwe9vqgamb2Hwhu9_tRJ7o';
 

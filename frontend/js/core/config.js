@@ -30,10 +30,10 @@ export const firebaseConfig = {
  *
  * Durante la migración, Firebase permanece intacto sin importar este valor.
  */
-export const DB_PROVIDER = 'firebase'; // Cambia a 'supabase' para activar Supabase
+export const DB_PROVIDER = 'supabase'; // ✅ Migración completada — Supabase activo
 
 export const supabaseConfig = {
-  url: 'https://scglhxbysycuqqzgzxhe.supabase.co',
+  url: 'https://scglhxbysycuqqzgqzxe.supabase.co',
   // Reemplaza este placeholder con la anon key real de tu proyecto Supabase
   // (Supabase Dashboard → Settings → API → Project API keys → anon/public)
   anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjZ2xoeGJ5c3ljdXFxemdxenhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MjM3NjYsImV4cCI6MjA5NjM5OTc2Nn0.NqDjxhXnRXOWKeykQO8szLwe9vqgamb2Hwhu9_tRJ7o',

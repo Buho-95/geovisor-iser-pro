@@ -13,7 +13,7 @@ const fs = require('fs');
 // Cargar @supabase/supabase-js desde node_modules del backend
 const { createClient } = require('./backend-cloudrun/node_modules/@supabase/supabase-js');
 
-const SUPABASE_URL = 'https://scglhxbysycuqqzgzxhe.supabase.co';
+const SUPABASE_URL = 'https://scglhxbysycuqqzgqzxe.supabase.co';
 const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjZ2xoeGJ5c3ljdXFxemdxenhlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDgyMzc2NiwiZXhwIjoyMDk2Mzk5NzY2fQ.JFTNBI1dGSX62SehW7xJ6rKorxVq6OKRWJQwF0pwWGo';
 
 const sql = fs.readFileSync(path.join(__dirname, 'scripts', 'supabase-schema.sql'), 'utf8');
@@ -30,7 +30,7 @@ async function main() {
   // en el SQL Editor del Supabase Dashboard y ejecutarlo directamente.
   //
   // Procedimiento:
-  // 1. Ve a https://supabase.com/dashboard/project/scglhxbysycuqqzgzxhe/editor
+  // 1. Ve a https://supabase.com/dashboard/project/scglhxbysycuqqzgqzxe/editor
   // 2. Abre el archivo scripts/supabase-schema.sql
   // 3. Copia todo el contenido y pégalo en el SQL Editor
   // 4. Haz clic en "Run" o pulsa Ctrl+Enter
@@ -39,7 +39,7 @@ async function main() {
   console.log('  ACCIÓN REQUERIDA: Ejecutar el schema en Supabase Dashboard');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
-  console.log('  1. Abre: https://supabase.com/dashboard/project/scglhxbysycuqqzgzxhe/editor');
+  console.log('  1. Abre: https://supabase.com/dashboard/project/scglhxbysycuqqzgqzxe/editor');
   console.log('  2. Copia el contenido de: scripts/supabase-schema.sql');
   console.log('  3. Pégalo en el editor SQL y ejecuta (Ctrl+Enter)');
   console.log('');
