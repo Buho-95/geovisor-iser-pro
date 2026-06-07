@@ -84,3 +84,6 @@ pubsub-debug.log
 .env.local
 .env.development
 .env.staging
+
+# Claves de servicio locales (Firebase)
+service-account.json

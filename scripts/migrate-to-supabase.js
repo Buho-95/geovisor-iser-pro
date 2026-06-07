@@ -23,12 +23,20 @@ const SUPABASE_SERVICE_ROLE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJz
 const isDryRun = !process.argv.includes('--apply');
 
 if (!admin.apps.length) {
-  // Reutiliza credenciales locales ADC de Firebase CLI o service-account.json
   try {
-    admin.initializeApp();
-    console.log('✅ Firebase Admin inicializado correctamente.');
+    const serviceAccountPath = path.join(__dirname, '..', 'service-account.json');
+    if (fs.existsSync(serviceAccountPath)) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccountPath),
+        storageBucket: 'geovisor-iser.firebasestorage.app'
+      });
+      console.log('✅ Firebase Admin inicializado usando service-account.json.');
+    } else {
+      admin.initializeApp();
+      console.log('✅ Firebase Admin inicializado usando credenciales por defecto (ADC).');
+    }
   } catch (e) {
-    console.error('❌ Error inicializando Firebase Admin. Asegúrate de haber hecho "firebase login" o tener configurada la variable GOOGLE_APPLICATION_CREDENTIALS.', e.message);
+    console.error('❌ Error inicializando Firebase Admin. Asegúrate de colocar tu "service-account.json" en la raíz del proyecto o configurar las credenciales ADC de Google.', e.message);
     process.exit(1);
   }
 }
