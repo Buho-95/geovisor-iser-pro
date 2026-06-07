@@ -24,19 +24,52 @@ const isDryRun = !process.argv.includes('--apply');
 
 if (!admin.apps.length) {
   try {
-    const serviceAccountPath = path.join(__dirname, '..', 'service-account.json');
-    if (fs.existsSync(serviceAccountPath)) {
+    let serviceAccountPath = null;
+    const rootPath = path.join(__dirname, '..');
+    
+    // 1. Intentar buscar nombres comunes
+    const attempts = [
+      'service-account.json',
+      'service-account.json.json'
+    ];
+    
+    for (const name of attempts) {
+      const p = path.join(rootPath, name);
+      if (fs.existsSync(p)) {
+        serviceAccountPath = p;
+        break;
+      }
+    }
+    
+    // 2. Si no se encuentra, escanear el directorio raíz por cualquier archivo JSON de credenciales de Firebase
+    if (!serviceAccountPath) {
+      const files = fs.readdirSync(rootPath);
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          const p = path.join(rootPath, file);
+          try {
+            const content = JSON.parse(fs.readFileSync(p, 'utf8'));
+            if (content.type === 'service_account' && content.project_id) {
+              serviceAccountPath = p;
+              break;
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    if (serviceAccountPath) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccountPath),
         storageBucket: 'geovisor-iser.firebasestorage.app'
       });
-      console.log('✅ Firebase Admin inicializado usando service-account.json.');
+      console.log(`✅ Firebase Admin inicializado usando: ${path.basename(serviceAccountPath)}`);
     } else {
       admin.initializeApp();
       console.log('✅ Firebase Admin inicializado usando credenciales por defecto (ADC).');
     }
   } catch (e) {
-    console.error('❌ Error inicializando Firebase Admin. Asegúrate de colocar tu "service-account.json" en la raíz del proyecto o configurar las credenciales ADC de Google.', e.message);
+    console.error('❌ Error inicializando Firebase Admin. Asegúrate de colocar tu "service-account.json" en la raíz del proyecto.', e.message);
     process.exit(1);
   }
 }
