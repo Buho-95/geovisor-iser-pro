@@ -1,13 +1,14 @@
 /**
- * Servicio de autenticación. Firebase Auth + modo visitante.
- * RBAC: rol real desde colección usuarios_iser (campo role: admin | viewer).
+ * Servicio de autenticación.
+ * Soporta Firebase Auth y Supabase Auth en paralelo controlado por DB_PROVIDER.
+ * RBAC: rol real desde colección usuarios_iser (Firebase) o tabla usuarios_iser (Supabase).
  */
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserSessionPersistence, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { auth, db } from './firebase.js';
 import { state, setUser } from '../core/state.js';
 import { Logger } from '../core/logger.js';
-import { COLLECTIONS } from '../core/config.js';
+import { COLLECTIONS, DB_PROVIDER } from '../core/config.js';
 
 const TEMP_ADMIN_EMAILS = ['pedrojtrillos.arq@gmail.com'];
 
@@ -78,10 +79,16 @@ function applyRoleUi(role, u) {
 }
 
 export function isAuthenticated() {
+  if (DB_PROVIDER === 'supabase') {
+    return state.user != null;
+  }
   return auth.currentUser != null;
 }
 
 export function isAdmin() {
+  if (DB_PROVIDER === 'supabase') {
+    return state.userRole === 'admin' && state.user != null && !state.user?.is_anonymous;
+  }
   return state.userRole === 'admin' && auth.currentUser != null && !auth.currentUser.isAnonymous;
 }
 
@@ -90,6 +97,140 @@ export function isVisitor() {
 }
 
 export function initAuth(callbacks = {}) {
+  // ══ Ruta Supabase ══════════════════════════════════════════════════
+  if (DB_PROVIDER === 'supabase') {
+    return _initAuthSupabase(callbacks);
+  }
+  // ══ Ruta Firebase (original) ══════════════════════════════════════════
+  return _initAuthFirebase(callbacks);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SUPABASE AUTH
+// ═══════════════════════════════════════════════════════════════
+async function _initAuthSupabase(callbacks = {}) {
+  const { onLoginSuccess, onAuthChange } = callbacks;
+  const {
+    signInWithEmail,
+    signInAnonymousSupabase,
+    signOutSupabase,
+    onSupabaseAuthChange,
+    getUserProfile,
+  } = await import('./supabase.js');
+
+  const form = document.getElementById('login-form');
+  const btnVisitor = document.getElementById('btn-visitor');
+  const btnExitVisitor = document.getElementById('btn-exit-visitor');
+
+  if (btnVisitor) {
+    btnVisitor.addEventListener('click', async () => {
+      const originalText = btnVisitor.innerHTML;
+      btnVisitor.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Ingresando...';
+      btnVisitor.disabled = true;
+      try {
+        await signInAnonymousSupabase();
+      } catch (error) {
+        Logger.error('Error en Visitor Login (Supabase):', error);
+        alert('No se pudo iniciar sesión como visitante.');
+      } finally {
+        btnVisitor.innerHTML = originalText;
+        btnVisitor.disabled = false;
+      }
+    });
+  }
+
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-login');
+      btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Conectando...';
+      btn.disabled = true;
+      try {
+        await signInWithEmail(
+          document.getElementById('email').value,
+          document.getElementById('password').value
+        );
+      } catch (error) {
+        Logger.error('Error en login (Supabase):', error);
+        const errEl = document.getElementById('login-error');
+        if (errEl) {
+          errEl.innerText = 'Credenciales inválidas o correo no registrado.';
+          errEl.classList.remove('hidden');
+        }
+      } finally {
+        btn.textContent = 'Iniciar Sesión';
+        btn.disabled = false;
+      }
+    });
+  }
+
+  async function performLogoutSB() {
+    const emailField = document.getElementById('email');
+    const passField = document.getElementById('password');
+    if (emailField) emailField.value = '';
+    if (passField) passField.value = '';
+    state.userRole = null;
+    state.user = null;
+    state.userProfile = null;
+    state.currentBlockId = null;
+    state.archivosNube = [];
+    try { await signOutSupabase(); } catch (e) { Logger.error('Error cerrando sesión Supabase', e); }
+    location.reload();
+  }
+
+  if (btnExitVisitor) btnExitVisitor.addEventListener('click', performLogoutSB);
+  document.getElementById('btn-logout')?.addEventListener('click', performLogoutSB);
+
+  // Escuchar cambios de sesión
+  onSupabaseAuthChange(async (sbUser) => {
+    Logger.debug('Supabase Auth change:', sbUser);
+    state.user = sbUser;
+    const loadingScreen = document.getElementById('loading-screen');
+
+    if (sbUser && !sbUser.is_anonymous) {
+      try {
+        const profile = await getUserProfile(sbUser.id);
+        state.userProfile = profile;
+        const email = (sbUser.email || '').toLowerCase();
+        const fallbackAdmin = TEMP_ADMIN_EMAILS.includes(email);
+        state.userRole = profile?.role === 'admin' || fallbackAdmin ? 'admin' : 'viewer';
+      } catch (err) {
+        Logger.warn('No se pudo leer usuarios_iser (Supabase):', err);
+        const email = (sbUser.email || '').toLowerCase();
+        state.userRole = TEMP_ADMIN_EMAILS.includes(email) ? 'admin' : 'viewer';
+      }
+
+      setUser(sbUser);
+      applyRoleUi(state.userRole, sbUser);
+      document.getElementById('auth-screen')?.classList.add('hidden-auth');
+      document.getElementById('app-container')?.classList.add('visible');
+      if (loadingScreen) loadingScreen.classList.add('loading-hidden');
+      onLoginSuccess?.();
+
+    } else if (sbUser?.is_anonymous) {
+      state.userProfile = null;
+      state.userRole = 'visitor';
+      setUser(sbUser);
+      applyRoleUi('visitor', sbUser);
+      document.getElementById('auth-screen')?.classList.add('hidden-auth');
+      document.getElementById('app-container')?.classList.add('visible');
+      if (loadingScreen) loadingScreen.classList.add('loading-hidden');
+      onLoginSuccess?.();
+
+    } else {
+      enforceAuthGuard();
+      document.getElementById('auth-screen')?.classList.remove('hidden-auth');
+      if (loadingScreen) loadingScreen.classList.add('loading-hidden');
+    }
+
+    onAuthChange?.(sbUser);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FIREBASE AUTH (original, sin cambios)
+// ═══════════════════════════════════════════════════════════════
+function _initAuthFirebase(callbacks = {}) {
   const { onLoginSuccess, onAuthChange } = callbacks;
 
   setPersistence(auth, browserSessionPersistence)

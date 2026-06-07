@@ -1,11 +1,11 @@
 /**
- * Subida de archivos a Firebase Storage y registro en Firestore.
+ * Subida de archivos a Storage (Firebase o Supabase) y registro en base de datos.
  * Integrado con FileManager mejorado - Drag & Drop, Vista Previa, Organización Inteligente
  */
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { storage, db } from './services/firebase.js';
-import { dbPath, storageBasePath } from './core/config.js';
+import { dbPath, storageBasePath, DB_PROVIDER } from './core/config.js';
 import { state } from './core/state.js';
 import { isAdmin } from './services/auth.js';
 import { getFileManager } from './file-manager.js';
@@ -360,9 +360,101 @@ export function setupUpload() {
 }
 
 /**
- * Sube un archivo individual al servidor
+ * Sube un archivo individual al servidor (Firebase o Supabase según DB_PROVIDER)
  */
 async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
+  if (DB_PROVIDER === 'supabase') {
+    return uploadSingleFileSupabase(file, tipoArchivo, carpeta, index, totalFiles);
+  }
+  return uploadSingleFileFirebase(file, tipoArchivo, carpeta, index, totalFiles);
+}
+
+/**
+ * Subida a Supabase Storage + registro en tabla archivos_iser
+ */
+async function uploadSingleFileSupabase(file, tipoArchivo, carpeta, index, totalFiles) {
+  const { uploadToSupabaseStorage, getSupabaseClient } = await import('./services/supabase.js');
+  let fileName = file.name;
+
+  // Igual prefijado que en Firebase
+  if (carpeta) {
+    let prefix = '';
+    const upperCarpeta = carpeta.toUpperCase();
+    if (upperCarpeta.includes('ELECTRICOS')) prefix = 'ELEC_';
+    else if (upperCarpeta.includes('REDES_DE_DATOS')) prefix = 'DATA_';
+    else if (upperCarpeta.includes('ACCESIBILIDAD_NTC_6047')) prefix = 'MATRIZ_';
+    else if (upperCarpeta.includes('ARQUITECTONICO') || upperCarpeta.includes('ESTRUCTURAL')) prefix = 'ARQ_';
+    if (prefix && !fileName.toUpperCase().startsWith(prefix)) fileName = prefix + fileName;
+  }
+
+  const sedeId = state?.currentSede || 'pamplona';
+  const bloqueId = state?.currentBlockId || 'sin_bloque';
+  // Ruta: sedes/{sede}/{bloque}/{carpeta}/{archivo}
+  const rutaStorage = `sedes/${sedeId}/${bloqueId}/${carpeta}/${fileName}`;
+
+  logUploadPath(rutaStorage, { sedeId, bloqueId: state?.currentBlockId, carpeta, fileName, tipoArchivo, isStaging });
+
+  const progressBar = document.getElementById('upload-progress-bar');
+  const progressText = document.getElementById('upload-percentage');
+  const statusText = document.getElementById('upload-status-text');
+  if (statusText) statusText.innerText = totalFiles === 1 ? `Subiendo ${fileName}...` : `Subiendo archivo ${index + 1} de ${totalFiles}...`;
+
+  try {
+    const { url: urlDescarga, storagePath } = await uploadToSupabaseStorage(
+      'documentos_iser',
+      rutaStorage,
+      file,
+      (pct) => {
+        if (progressBar) progressBar.style.width = pct + '%';
+        if (progressText) progressText.innerText = Math.round(pct) + '%';
+      }
+    );
+
+    const [disciplinaRaw, ...subRest] = String(carpeta || '').split('/').filter(Boolean);
+    const subcarpetaRaw = subRest.join('/') || null;
+    const anioMatch = fileName.match(/(20\d{2})/);
+    const anio = anioMatch ? parseInt(anioMatch[1], 10) : null;
+
+    // Registrar en la tabla archivos_iser de Supabase
+    const sb = getSupabaseClient();
+    const docId = `${bloqueId}_${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const { error: dbErr } = await sb.from('archivos_iser').upsert({
+      id: docId,
+      bloque: bloqueId,
+      sede: sedeId,
+      nombre: fileName,
+      tipo: tipoArchivo,
+      carpeta,
+      url: urlDescarga,
+      storage_path: rutaStorage,
+      fecha_creacion: new Date().toISOString(),
+      subido_por: state.user?.email || 'desconocido',
+      tamanio: file.size,
+      tipo_mime: file.type,
+      ia: {
+        disciplina: disciplinaRaw || null,
+        subcarpeta: subcarpetaRaw,
+        tipoArchivo,
+        anio,
+        entorno: isStaging ? 'staging' : 'production',
+        schemaVersion: '1.0.0',
+      },
+    });
+
+    if (dbErr) throw new Error(dbErr.message);
+
+    logUploadDone(rutaStorage, { fileName, sedeId, bloqueId });
+    return { success: true, fileName };
+  } catch (error) {
+    console.error('Error subiendo a Supabase:', error);
+    return { success: false, error, fileName };
+  }
+}
+
+/**
+ * Subida original a Firebase Storage + Firestore
+ */
+async function uploadSingleFileFirebase(file, tipoArchivo, carpeta, index, totalFiles) {
   let fileName = file.name;
 
   // Add category prefix based on selected folder

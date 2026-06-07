@@ -1,5 +1,6 @@
 /**
- * Servicio Firestore: suscripción por bloque, auditoría e historial.
+ * Servicio de datos: suscripción por bloque, auditoría e historial.
+ * Soporta Firebase Firestore y Supabase Postgres según DB_PROVIDER.
  */
 import {
   collection,
@@ -16,7 +17,7 @@ import {
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js';
 import { db, storage } from './firebase.js';
 import { state, setArchivos, setEstadosBloques } from '../core/state.js';
-import { COLLECTIONS, STORAGE_PATHS } from '../core/config.js';
+import { COLLECTIONS, STORAGE_PATHS, DB_PROVIDER } from '../core/config.js';
 import { on, EVENTS } from '../core/events.js';
 import { Logger } from '../core/logger.js';
 import { computeInventoryFingerprint } from '../core/inventoryHash.js';
@@ -163,7 +164,32 @@ export function startArchivosSync(onUpdate) {
   return initArchivosSubscription(onUpdate);
 }
 
+/**
+ * startEstadosBloquesSync: suscripción en tiempo real a estados de bloques.
+ * Supabase no tiene onSnapshot nativo — usa polling cada 30s o carga inicial.
+ */
 export function startEstadosBloquesSync(onUpdate) {
+  if (DB_PROVIDER === 'supabase') {
+    // Carga inicial y luego polling liviano
+    let intervalId = null;
+    const syncSB = async () => {
+      try {
+        const { getAllEstadosBloques } = await import('./supabase.js');
+        const docs = await getAllEstadosBloques();
+        state.estadosBloques = docs;
+        setEstadosBloques(docs);
+        onUpdate?.();
+      } catch (error) {
+        Logger.error('Supabase bloques_estado sync error:', error);
+        onUpdate?.();
+      }
+    };
+    syncSB(); // carga inmediata
+    intervalId = setInterval(syncSB, 30_000); // refrescar cada 30s
+    return () => clearInterval(intervalId); // devolver unsub
+  }
+
+  // ═ Firebase (original) ════════════════════════════════════════════
   const timeoutId = setTimeout(() => {
     const statusEl = document.getElementById('estado-cumplimiento') || document.getElementById('audit-semaforo-label');
     const scoreEl = document.getElementById('audit-score-value');
@@ -201,6 +227,11 @@ export function startEstadosBloquesSync(onUpdate) {
 }
 
 export async function guardarEstadoBloque(blockId, datos) {
+  if (DB_PROVIDER === 'supabase') {
+    const { guardarEstadoBloqueSupabase } = await import('./supabase.js');
+    return guardarEstadoBloqueSupabase(blockId, datos);
+  }
+  // Firebase original
   try {
     const docRef = doc(db, COLLECTIONS.ESTADOS_BLOQUES, blockId);
     await setDoc(docRef, datos, { merge: true });
@@ -212,6 +243,11 @@ export async function guardarEstadoBloque(blockId, datos) {
 }
 
 export async function getAuditoriaCached(blockId) {
+  if (DB_PROVIDER === 'supabase') {
+    const { getAuditoriaCachedSupabase } = await import('./supabase.js');
+    return getAuditoriaCachedSupabase(blockId);
+  }
+  // Firebase original
   try {
     const docRef = doc(db, COLLECTIONS.AUDITORIAS_BLOQUES, blockId);
     const snap = await getDoc(docRef);
@@ -226,9 +262,13 @@ export async function getAuditoriaCached(blockId) {
 }
 
 export async function guardarAuditoria(blockId, auditResult, inventario) {
+  if (DB_PROVIDER === 'supabase') {
+    const { guardarAuditoriaSupabase } = await import('./supabase.js');
+    return guardarAuditoriaSupabase(blockId, auditResult, inventario);
+  }
+  // Firebase original
   try {
     const archivoHash = computeInventoryFingerprint(inventario);
-
     const docRef = doc(db, COLLECTIONS.AUDITORIAS_BLOQUES, blockId);
     await setDoc(docRef, {
       ...auditResult,
@@ -245,6 +285,13 @@ export async function guardarAuditoria(blockId, auditResult, inventario) {
 }
 
 export async function uploadReportToStorage(blockId, pdfBlob, fileName) {
+  if (DB_PROVIDER === 'supabase') {
+    const { uploadToSupabaseStorage } = await import('./supabase.js');
+    const storagePath = `${blockId}/${fileName}`;
+    const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+    return uploadToSupabaseStorage('auditorias', storagePath, file);
+  }
+  // Firebase original
   const path = `${STORAGE_PATHS.AUDITORIAS}/${blockId}/${fileName}`;
   const fileRef = storageRef(storage, path);
   await uploadBytes(fileRef, pdfBlob, { contentType: 'application/pdf' });
@@ -253,6 +300,11 @@ export async function uploadReportToStorage(blockId, pdfBlob, fileName) {
 }
 
 export async function saveReportMetadata(blockId, blockName, downloadUrl, storagePath, userEmail) {
+  if (DB_PROVIDER === 'supabase') {
+    const { saveReportMetadataSupabase } = await import('./supabase.js');
+    return saveReportMetadataSupabase(blockId, blockName, downloadUrl, storagePath, userEmail);
+  }
+  // Firebase original
   const colRef = collection(db, COLLECTIONS.REPORTES_HISTORIAL);
   const docRef = await addDoc(colRef, {
     blockId,
@@ -267,6 +319,11 @@ export async function saveReportMetadata(blockId, blockName, downloadUrl, storag
 }
 
 export async function getReportHistory() {
+  if (DB_PROVIDER === 'supabase') {
+    const { getReportHistorySupabase } = await import('./supabase.js');
+    return getReportHistorySupabase();
+  }
+  // Firebase original
   try {
     const colRef = collection(db, COLLECTIONS.REPORTES_HISTORIAL);
     const q = query(colRef, orderBy('fecha', 'desc'));
@@ -279,6 +336,11 @@ export async function getReportHistory() {
 }
 
 export async function deleteReport(reportId, storagePath) {
+  if (DB_PROVIDER === 'supabase') {
+    const { deleteReportSupabase } = await import('./supabase.js');
+    return deleteReportSupabase(reportId, storagePath);
+  }
+  // Firebase original
   if (storagePath) {
     try {
       const fileRef = storageRef(storage, storagePath);
@@ -287,7 +349,6 @@ export async function deleteReport(reportId, storagePath) {
       Logger.warn('No se pudo borrar el archivo en Storage (puede ya no existir):', e);
     }
   }
-
   const docRef = doc(db, COLLECTIONS.REPORTES_HISTORIAL, reportId);
   await deleteDoc(docRef);
 }
