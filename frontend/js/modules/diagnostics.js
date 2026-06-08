@@ -5,7 +5,7 @@
  * los puntos críticos del flujo de subida / listado:
  *
  *   1. __geovisorDiag.env()      → entorno (isStaging, STORAGE_PREFIX)
- *   2. __geovisorDiag.bucket()   → bucket configurado en Firebase Storage
+ *   2. __geovisorDiag.bucket()   → bucket configurado en Supabase Storage
  *   3. __geovisorDiag.build({…}) → path que produciría buildStoragePath(...)
  *   4. __geovisorDiag.list(path) → listAll() sobre una ruta completa
  *   5. __geovisorDiag.listSelection()
@@ -21,12 +21,7 @@
  *   localStorage.setItem('geovisor:disable-diag','1');
  */
 
-import {
-  ref as storageRef,
-  listAll,
-  getMetadata,
-} from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js';
-import { storage } from '../services/firebase.js';
+
 import { state } from '../core/state.js';
 import { isStaging } from '../core/env.js';
 import { STORAGE_PREFIX } from '../core/paths.js';
@@ -85,14 +80,12 @@ export function installDiagnostics() {
       return info;
     },
 
-    /* ── 2. Bucket Firebase Storage ─────────────────────────── */
+    /* ── 2. Bucket Supabase Storage ─────────────────────────── */
     bucket() {
-      // El objeto `storage` expone `app.options.storageBucket`.
-      const bucket = storage?.app?.options?.storageBucket
-                  || storage?._bucket?.bucket
-                  || 'desconocido';
+      // Supabase storage bucket es por defecto 'geovisor_storage'
+      const bucket = 'geovisor_storage';
       // eslint-disable-next-line no-console
-      console.log('%c[diag] Firebase Storage bucket:', 'font-weight:bold', bucket);
+      console.log('%c[diag] Supabase Storage bucket:', 'font-weight:bold', bucket);
       return bucket;
     },
 
@@ -112,9 +105,10 @@ export function installDiagnostics() {
         return null;
       }
       try {
-        const r = await listAll(storageRef(storage, path));
-        const files   = r.items.map(i => i.fullPath);
-        const folders = r.prefixes.map(p => p.fullPath);
+        const { listSupabaseStorage } = await import('../services/supabase.js');
+        const r = await listSupabaseStorage(path);
+        const files   = r.items.map(i => i.name);
+        const folders = r.prefixes.map(p => p.name);
         state_.lastRead = { path, at: new Date().toISOString(), count: files.length };
         // eslint-disable-next-line no-console
         console.groupCollapsed(
@@ -214,7 +208,7 @@ export function installDiagnostics() {
       // eslint-disable-next-line no-console
       console.log(`%c[diag] Geovisor — herramientas de diagnóstico
       env()                         → entorno + estado global
-      bucket()                      → bucket Firebase Storage
+      bucket()                      → bucket Supabase Storage
       build({sedeId,bloque,disciplina,subcarpeta,archivo})
                                     → path resultante
       list("staging/sedes/…")       → listAll sobre una ruta
@@ -273,8 +267,11 @@ export function logUploadDone(rutaStorage, meta = {}) {
 // Exportada por si se quiere usar fuera del API window.
 export async function inspectFile(fullPath) {
   try {
-    const md = await getMetadata(storageRef(storage, fullPath));
-    return md;
+    const { getSupabaseClient } = await import('../services/supabase.js');
+    const sb = getSupabaseClient();
+    const { data, error } = await sb.from('archivos_iser').select('*').eq('storage_path', fullPath).single();
+    if (error) throw error;
+    return data;
   } catch (err) {
     return { error: String(err?.message || err) };
   }

@@ -1,28 +1,22 @@
 /**
  * dynamic-folders-store.js — CRUD de carpetas dinámicas staging (zonas "rojo" del PDF).
  *
- * Colección: staging_estructura_dinamica
- *   docId = "{sedeId}__{parentPathSanitizado}__{nombre}"
- *   doc = {
- *     sedeId, parentPath, nombre, path, numero,
- *     creadoPor, creadoEn, metadata: { disciplina?, estado? }
- *   }
+ * Tabla Supabase: estructura_dinamica
+ *   id = "{sedeId}__{parentPathSanitizado}__{nombre}"
+ *   columnas: id, sede_id, parent_path, nombre, path, numero,
+ *             creado_por, creado_en, metadata
  *
  * Uso:
  *   const folders = await listDynamicFolders('pamplona');
  *   const key = `${folder.parentPath}/${folder.nombre}`; // path completo
  */
-import { COLLECTIONS } from './constants.js';
-import { db } from '../services/firebase.js';
-import {
-  collection, query, where, getDocs, setDoc, doc, serverTimestamp, deleteDoc
-} from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 import { state } from './state.js';
 import { validateFolderName } from './structure-validator.js';
 import { isDynamicFolder, nextDynamicNumber } from './structure-schema.js';
 import { normalizeToArray } from './iter-utils.js';
+import { getSupabaseClient } from '../services/supabase.js';
 
-const COL = COLLECTIONS.ESTRUCTURA_DINAMICA; // resuelta por paths.js en staging
+const TABLE = 'estructura_dinamica';
 
 function sanitizeDocId(parentPath, nombre) {
   return `${parentPath.replace(/\//g, '__')}__${nombre}`;
@@ -33,9 +27,22 @@ function sanitizeDocId(parentPath, nombre) {
  */
 export async function listDynamicFolders(sedeId) {
   try {
-    const q = query(collection(db, COL), where('sedeId', '==', sedeId));
-    const snap = await getDocs(q);
-    return normalizeToArray(snap?.docs).map(d => ({ id: d.id, ...(d.data() || {}) }));
+    const sb = getSupabaseClient();
+    const { data, error } = await sb
+      .from(TABLE)
+      .select('*')
+      .eq('sede_id', sedeId);
+    if (error) throw error;
+    return (data || []).map(row => ({
+      id: row.id,
+      sedeId: row.sede_id,
+      parentPath: row.parent_path,
+      nombre: row.nombre,
+      path: row.path,
+      numero: row.numero,
+      creadoPor: row.creado_por,
+      creadoEn: row.creado_en,
+    }));
   } catch (err) {
     console.warn('[dynamic-folders-store] listDynamicFolders falló, devolviendo []:', err?.message || err);
     return [];
@@ -64,24 +71,40 @@ export async function createDynamicFolder({ sedeId, parentPath, nombre, existing
   }
 
   const numero = (nombre.match(/^(\d{2})_/) || [null, null])[1];
+  const id = sanitizeDocId(parentPath, nombre);
+
   const payload = {
-    sedeId,
-    parentPath,
+    id,
+    sede_id: sedeId,
+    parent_path: parentPath,
     nombre,
     path: `${parentPath}/${nombre}`,
     numero: numero ? parseInt(numero, 10) : null,
-    creadoPor: state?.user?.email || 'desconocido',
-    creadoEn: serverTimestamp(),
+    creado_por: state?.user?.email || 'desconocido',
+    creado_en: new Date().toISOString(),
   };
 
-  const id = sanitizeDocId(parentPath, nombre);
-  await setDoc(doc(db, COL, id), payload, { merge: false });
-  return { id, ...payload };
+  const sb = getSupabaseClient();
+  const { error } = await sb.from(TABLE).insert(payload);
+  if (error) throw error;
+
+  return {
+    id,
+    sedeId,
+    parentPath,
+    nombre,
+    path: payload.path,
+    numero: payload.numero,
+    creadoPor: payload.creado_por,
+    creadoEn: payload.creado_en,
+  };
 }
 
 export async function deleteDynamicFolder({ sedeId, parentPath, nombre }) {
   const id = sanitizeDocId(parentPath, nombre);
-  await deleteDoc(doc(db, COL, id));
+  const sb = getSupabaseClient();
+  const { error } = await sb.from(TABLE).delete().eq('id', id);
+  if (error) throw error;
 }
 
 /**

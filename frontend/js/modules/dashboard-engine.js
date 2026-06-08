@@ -21,8 +21,6 @@
  * Sin cambios de lógica, auth, events ni Firebase.
  */
 
-import { ref, listAll } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js';
-import { storage } from '../services/firebase.js';
 import { DB_PROVIDER } from '../core/config.js';
 import { buildStoragePath } from '../core/storage-routing.js';
 import { loadSchema, buildSedeTree } from '../core/structure-schema.js';
@@ -93,20 +91,12 @@ async function listPath(path) {
   const p = (async () => {
     try {
       let result;
-      if (DB_PROVIDER === 'supabase') {
-        const { listSupabaseStorage } = await import('../services/supabase.js');
-        const res = await listSupabaseStorage(path);
-        result = {
-          items: res.items.filter(isRealFile),
-          prefixes: res.prefixes,
-        };
-      } else {
-        const res = await listAll(ref(storage, path));
-        result = {
-          items: res.items.filter(isRealFile),
-          prefixes: res.prefixes,
-        };
-      }
+      const { listSupabaseStorage } = await import('../services/supabase.js');
+      const res = await listSupabaseStorage(path);
+      result = {
+        items: res.items.filter(isRealFile),
+        prefixes: res.prefixes,
+      };
       cache.set(path, result);
       return result;
     } catch (err) {

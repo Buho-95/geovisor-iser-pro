@@ -1,6 +1,5 @@
 /**
- * Configuración de Firebase y rutas de datos.
- * También contiene la configuración de Supabase (migración paralela).
+ * Configuración de Supabase y rutas de datos.
  * Compatible con la estructura actual; extensible para nuevas colecciones.
  *
  * IMPORTANTE: COLLECTIONS, STORAGE_PATHS, dbPath y storageBasePath son env-aware.
@@ -10,27 +9,11 @@
 import { COLLECTIONS, STORAGE_PATHS } from './constants.js';
 import { ENV_MODE, isStaging } from './env.js';
 
-export const firebaseConfig = {
-  apiKey: "AIzaSyDCBvXKtPaK_BCzW97RoyiTMRAhCUC5Uyk",
-  authDomain: "geovisor-iser.firebaseapp.com",
-  projectId: "geovisor-iser",
-  storageBucket: "geovisor-iser.firebasestorage.app",
-  messagingSenderId: "303456177094",
-  appId: "1:303456177094:web:ee20c87df7333a397600c7"
-};
-
 // ═══════════════════════════════════════════════════════════════
 // MIGRACIÓN — Supabase (DB_PROVIDER controla cuál proveedor usa la app)
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * Cambia este valor para alternar entre proveedores:
- *   'firebase'  → usa Firebase (Auth, Firestore, Storage) — por defecto
- *   'supabase'  → usa Supabase (Auth, Postgres, Storage) y Cloud Run backend
- *
- * Durante la migración, Firebase permanece intacto sin importar este valor.
- */
-export const DB_PROVIDER = 'supabase'; // ✅ Migración completada — Supabase activo
+export const DB_PROVIDER = 'supabase';
 
 export const supabaseConfig = {
   url: 'https://scglhxbysycuqqzgqzxe.supabase.co',

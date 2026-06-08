@@ -14,7 +14,7 @@
  *
  * CAMBIO ARQUITECTÓNICO: La llamada a Gemini AI ya NO se hace desde el frontend.
  * Se delega a Cloud Function HTTPS directa.
- * La API Key de Gemini está segura en Firebase Secret Manager.
+ * La API Key de Gemini está segura en Google Cloud Secret Manager.
  *
  * REGLAS DE ORO: Este módulo NO modifica ni referencia ninguna función
  * de mantenimiento.js (generateAIDiagnosis, renderMantCharts, exportarInformeOficial).
@@ -227,7 +227,7 @@ function renderPanelAuditoria() {
       <div id="audit-spinner-overlay" class="audit-spinner-overlay" style="display:none; border-radius: var(--radius-lg);">
         <div class="audit-spinner-content">
           <div class="audit-spinner-ring"></div>
-          <p class="audit-spinner-text">Escaneando archivos en Firebase Storage...</p>
+          <p class="audit-spinner-text">Escaneando archivos en Supabase Storage...</p>
         </div>
       </div>
     </div>
@@ -398,7 +398,7 @@ function renderPanelAuditoria() {
       if (btnRefresh) { btnRefresh.disabled = true; btnRefresh.innerHTML = '<i class="ph ph-spinner animate-spin"></i> <span>Refrescando...</span>'; }
 
       // Step 1: Scan files
-      if (spinnerText) spinnerText.textContent = 'Escaneando archivos en Firebase Storage...';
+      if (spinnerText) spinnerText.textContent = 'Escaneando archivos en Supabase Storage...';
       const inventario = await escanearArchivosBloque(blockId);
 
       if (inventario.totalArchivos === 0) {
@@ -591,7 +591,7 @@ function renderEmptyState(container, blockId, isVisitorNoCache = false) {
     container.innerHTML = `
       <div class="audit-empty-state">
         <i class="ph ph-folder-dashed" style="font-size:2.5rem;color:var(--text-muted);"></i>
-        <p>No se encontraron archivos para el bloque <strong>${blockId}</strong> en Firebase Storage.</p>
+        <p>No se encontraron archivos para el bloque <strong>${blockId}</strong> en Supabase Storage.</p>
         <p class="audit-empty-hint">Sube documentos a la planoteca antes de ejecutar la auditoría normativa.</p>
       </div>
     `;

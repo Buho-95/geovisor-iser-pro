@@ -356,7 +356,7 @@ export async function bootstrap() {
 
   // Dashboard Pro legacy: desactivado. Reemplazado por el Dashboard
   // Inteligente (engine + view) que audita completitud real contra
-  // Firebase Storage y se monta al activar la tab o al cambiar sede.
+  // Supabase Storage y se monta al activar la tab o al cambiar sede.
   // El módulo `dashboard.js` sigue disponible por si se quiere revertir;
   // sólo se quitó la llamada automática para evitar doble render en el
   // mismo `#dashboard-container`.

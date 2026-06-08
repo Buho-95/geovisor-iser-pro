@@ -9,8 +9,6 @@ import { generarMenuPlanoteca } from './planoteca-structure.js';
 import { getPathsForFilter, getFirstFileInPath, getFilesInPath, normalizeKey } from './services/fileMapper.js';
 import { escapeHtml } from './core/safe-dom.js';
 
-import { storage } from './services/firebase.js';
-import { ref as storageRef, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 import { DB_PROVIDER } from './core/config.js';
 
 let blockPreviewDispose3D = null;
@@ -1840,22 +1838,15 @@ export function setupDeleteDelegation(container) {
     deleteBtn.style.opacity = '0.3';
 
     try {
-      // Dynamic import to avoid circular dependencies
-      const { ref, deleteObject } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js");
-      const { doc, deleteDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
-      const { storage, db } = await import('./services/firebase.js');
-      const { dbPath } = await import('./core/config.js');
-
-      // 1. Delete from Firebase Storage
+      const { deleteFromSupabaseStorage, getSupabaseClient } = await import('./services/supabase.js');
+      // 1. Delete from Supabase Storage
       if (file.storagePath) {
-        const fileRef = ref(storage, file.storagePath);
-        await deleteObject(fileRef);
+        await deleteFromSupabaseStorage(file.storagePath);
       }
-
-      // 2. Delete Firestore document
+      // 2. Delete Postgres row
       if (file.id) {
-        const docRef = doc(db, dbPath, file.id);
-        await deleteDoc(docRef);
+        const sb = getSupabaseClient();
+        await sb.from('archivos_iser').delete().eq('id', file.id);
       }
 
       // 3. Firestore onSnapshot will auto-refresh the file list

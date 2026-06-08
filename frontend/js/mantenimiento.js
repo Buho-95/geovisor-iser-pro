@@ -5,7 +5,7 @@
  */
 import { state, setCurrentBlock } from './core/state.js';
 import { getCampusData } from './campus-data.js';
-import { storage } from './services/firebase.js';
+
 import { getFilesInPath } from './services/fileMapper.js';
 import { guardarEstadoBloque, uploadReportToStorage, saveReportMetadata } from './services/firestore.js';
 import { on, EVENTS } from './core/events.js';
@@ -71,7 +71,7 @@ function getContextForAI(blockId) {
 /**
  * Función generateAIDiagnosis (Obsoleta/Deuda Técnica eliminada)
  * El diagnóstico IA ahora se realiza de forma centralizada en el backend
- * vía Firebase Cloud Functions y se recupera de Firestore (auditorias_bloques).
+ * vía Cloud Run y se recupera de Supabase (auditorias_bloques).
  */
 /**
  * Render Chart.js graphs based on Gemini JSON analytics
@@ -566,7 +566,7 @@ document.addEventListener('click', (e) => {
 });
 
 /**
- * Generates the PDF with embedded chart images and auto-uploads to Firebase.
+ * Generates the PDF with embedded chart images and auto-uploads to Supabase Storage.
  * @param {Object} chartImages — { radarChart: dataUrl, model3D: dataUrl }
  */
 async function generatePDFWithCharts(chartImages = {}) {
@@ -826,17 +826,17 @@ async function generatePDFWithCharts(chartImages = {}) {
     const fileName = `Reporte_Auditoria_Tecnica_${blockId}_${Date.now()}.pdf`;
     doc.save(fileName);
 
-    // ── Auto-upload to Firebase Storage (Admin only) ──
+    // ── Auto-upload to Supabase Storage (Admin only) ──
     if (isAdmin()) {
       try {
         const pdfBlob = doc.output('blob');
         const { url, storagePath } = await uploadReportToStorage(blockId, pdfBlob, fileName);
         const userEmail = state.user?.email || 'admin';
         await saveReportMetadata(blockId, blockName, url, storagePath, userEmail);
-        Logger.info(`📄 Reporte subido a Firebase Storage y registrado en historial.`);
+        Logger.info(`📄 Reporte subido a Supabase Storage y registrado en historial.`);
         refreshHistory();
       } catch (uploadErr) {
-        Logger.warn('No se pudo subir el reporte a Firebase:', uploadErr);
+        Logger.warn('No se pudo subir el reporte a Supabase:', uploadErr);
       }
     }
 

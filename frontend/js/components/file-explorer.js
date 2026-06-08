@@ -6,27 +6,19 @@
  *   <STORAGE_PREFIX>sedes/{sedeId}/{path...}
  *
  * SOLO frontend. NO modifica schema, seed, reglas ni rutas Storage.
- * Usa exclusivamente helpers ya existentes (`buildStoragePath`) y el SDK de Firebase.
+ * Usa exclusivamente helpers ya existentes (`buildStoragePath`) y Supabase Storage.
  *
  * Acciones disponibles por archivo:
  *   - Ver       → openViewer(file)
- *   - Descargar → enlace `getDownloadURL`
- *   - Eliminar  → deleteObject (solo admin)
+ *   - Descargar → URL pública de Supabase
+ *   - Eliminar  → deleteFromSupabaseStorage (solo admin)
  *   - Subir aquí → pre-carga ruta y abre el modal de upload existente
  */
 import { Logger } from '../core/logger.js';
 import { state } from '../core/state.js';
 import { buildStoragePath } from '../core/storage-routing.js';
 import { STORAGE_PREFIX } from '../core/paths.js';
-import { DB_PROVIDER } from '../core/config.js';
-import { storage } from '../services/firebase.js';
-import {
-  ref as storageRef,
-  listAll,
-  getDownloadURL,
-  getMetadata,
-  deleteObject,
-} from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js';
+import { listSupabaseStorage, deleteFromSupabaseStorage } from '../services/supabase.js';
 import { openViewer, setVisorFileList } from '../visor.js';
 import { getBloques, loadSchema } from '../core/structure-schema.js';
 
@@ -160,25 +152,14 @@ async function renderPath(host, { sedeId, path }) {
   host.innerHTML = renderShell({ sedeId, path, fullStoragePath, loading: true });
 
   try {
+    const legacyPath = await buildLegacyStoragePath(sedeId, path);
     // Query canonical + legacy paths in parallel for backwards compatibility
-    let canonicalResult, legacyResult;
-    if (DB_PROVIDER === 'supabase') {
-      const { listSupabaseStorage } = await import('../services/supabase.js');
-      [canonicalResult, legacyResult] = await Promise.all([
-        listSupabaseStorage(fullStoragePath).catch(() => ({ items: [], prefixes: [] })),
-        legacyPath
-          ? listSupabaseStorage(legacyPath).catch(() => null)
-          : Promise.resolve(null),
-      ]);
-    } else {
-      const folderRef = storageRef(storage, fullStoragePath);
-      [canonicalResult, legacyResult] = await Promise.all([
-        listAll(folderRef).catch(() => ({ items: [], prefixes: [] })),
-        legacyPath
-          ? listAll(storageRef(storage, legacyPath)).catch(() => null)
-          : Promise.resolve(null),
-      ]);
-    }
+    const [canonicalResult, legacyResult] = await Promise.all([
+      listSupabaseStorage(fullStoragePath).catch(() => ({ items: [], prefixes: [] })),
+      legacyPath
+        ? listSupabaseStorage(legacyPath).catch(() => null)
+        : Promise.resolve(null),
+    ]);
 
     // Merge items from both paths, deduplicating by filename (canonical wins)
     let mergedItems = [...(canonicalResult.items || [])];
@@ -200,28 +181,13 @@ async function renderPath(host, { sedeId, path }) {
     // Resolver metadata + URL en paralelo (con tolerancia a fallos individuales).
     const files = await Promise.all(items.map(async (it) => {
       try {
-        if (DB_PROVIDER === 'supabase') {
-          return {
-            name: it.name,
-            fullPath: it.fullPath,
-            size: it.size ?? null,
-            contentType: it.contentType ?? null,
-            updated: it.updated ?? null,
-            url: it.url,
-          };
-        }
-
-        const [meta, url] = await Promise.all([
-          getMetadata(it).catch(() => null),
-          getDownloadURL(it).catch(() => null),
-        ]);
         return {
           name: it.name,
           fullPath: it.fullPath,
-          size: meta?.size ?? null,
-          contentType: meta?.contentType ?? null,
-          updated: meta?.updated ?? meta?.timeCreated ?? null,
-          url,
+          size: it.size ?? null,
+          contentType: it.contentType ?? null,
+          updated: it.updated ?? null,
+          url: it.url,
         };
       } catch (err) {
         Logger.warn?.('[file-explorer] no se pudo leer metadata:', err?.message || err);
@@ -402,12 +368,7 @@ async function deleteFromCard(host, btn) {
   const fullPath = card.dataset.storagePath;
   if (!confirm(`¿Eliminar "${name}"?\n\nEsta acción no se puede deshacer.`)) return;
   try {
-    if (DB_PROVIDER === 'supabase') {
-      const { deleteFromSupabaseStorage } = await import('../services/supabase.js');
-      await deleteFromSupabaseStorage(fullPath);
-    } else {
-      await deleteObject(storageRef(storage, fullPath));
-    }
+    await deleteFromSupabaseStorage(fullPath);
     Logger.info(`[file-explorer] Eliminado: ${fullPath}`);
     // Emitir evento único (bootstrap lo escucha para invalidar caches del dashboard).
     try {

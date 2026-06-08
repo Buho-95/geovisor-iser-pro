@@ -2,9 +2,6 @@
  * Subida de archivos a Storage (Firebase o Supabase) y registro en base de datos.
  * Integrado con FileManager mejorado - Drag & Drop, Vista Previa, Organización Inteligente
  */
-import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
-import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { storage, db } from './services/firebase.js';
 import { dbPath, storageBasePath, DB_PROVIDER } from './core/config.js';
 import { state } from './core/state.js';
 import { isAdmin } from './services/auth.js';
@@ -360,19 +357,9 @@ export function setupUpload() {
 }
 
 /**
- * Sube un archivo individual al servidor (Firebase o Supabase según DB_PROVIDER)
+ * Sube un archivo individual al servidor (Supabase)
  */
 async function uploadSingleFile(file, tipoArchivo, carpeta, index, totalFiles) {
-  if (DB_PROVIDER === 'supabase') {
-    return uploadSingleFileSupabase(file, tipoArchivo, carpeta, index, totalFiles);
-  }
-  return uploadSingleFileFirebase(file, tipoArchivo, carpeta, index, totalFiles);
-}
-
-/**
- * Subida a Supabase Storage + registro en tabla archivos_iser
- */
-async function uploadSingleFileSupabase(file, tipoArchivo, carpeta, index, totalFiles) {
   const { uploadToSupabaseStorage, getSupabaseClient } = await import('./services/supabase.js');
   let fileName = file.name;
 
@@ -451,161 +438,6 @@ async function uploadSingleFileSupabase(file, tipoArchivo, carpeta, index, total
 }
 
 /**
- * Subida original a Firebase Storage + Firestore
- */
-async function uploadSingleFileFirebase(file, tipoArchivo, carpeta, index, totalFiles) {
-  let fileName = file.name;
-
-  // Add category prefix based on selected folder
-  if (carpeta) {
-    let prefix = '';
-    const upperCarpeta = carpeta.toUpperCase();
-    if (upperCarpeta.includes('ELECTRICOS')) {
-      prefix = 'ELEC_';
-    } else if (upperCarpeta.includes('REDES_DE_DATOS')) {
-      prefix = 'DATA_';
-    } else if (upperCarpeta.includes('ACCESIBILIDAD_NTC_6047')) {
-      prefix = 'MATRIZ_';
-    } else if (upperCarpeta.includes('ARQUITECTONICO') || upperCarpeta.includes('ESTRUCTURAL')) {
-      prefix = 'ARQ_';
-    }
-
-    if (prefix && !fileName.toUpperCase().startsWith(prefix)) {
-      fileName = prefix + fileName;
-    }
-  }
-
-  // Jerarquía staging (PDF oficial): staging/sedes/{sede}/{bloque}/{disciplina}/{sub}/archivo
-  // Producción: ruta heredada {storageBasePath}/{bloqueId}/{carpeta}/archivo
-  let rutaStorage;
-  if (isJerarquiaPorSedeActiva()) {
-    // `carpeta` viene con formato "Disciplina/Subcarpeta[/Sub2]"
-    const [disciplina, ...restoSub] = String(carpeta).split('/').filter(Boolean);
-    const subcarpeta = restoSub.join('/') || undefined;
-    const sedeId = state?.currentSede || 'pamplona';
-    const rawBloque = state.currentBlockId; // ID técnico del mapa (p. ej. "ib", "ia")
-
-    // ⚡ Fix desincronización shortId ↔ canónico.
-    // El mapa emite ids cortos ("ib") pero el explorer/dashboard leen con el
-    // nombre canónico del schema ("09_Bloque_IB"). Si subimos con el shortId,
-    // el archivo queda en un path huérfano que nadie lista. Resolvemos SIEMPRE
-    // al canónico antes de construir la ruta. Si no hay canónico (bloque no
-    // registrado en schema) caemos al raw y dejamos constancia.
-    const bloqueCanonical = await resolveBloqueCanonical(sedeId, rawBloque);
-    const bloque = bloqueCanonical || rawBloque;
-    if (!bloqueCanonical) {
-      console.warn(
-        '[upload/staging] No se pudo resolver canónico para',
-        rawBloque, `(sede=${sedeId}). Subo con el id crudo; revisa el schema.`);
-    } else if (bloqueCanonical !== rawBloque) {
-      console.log(
-        `%c[upload] bloque "${rawBloque}" → canónico "${bloqueCanonical}"`,
-        'color:#16a34a;font-weight:bold');
-    }
-
-    const pathValidation = validateStoragePath({ disciplina, subcarpeta });
-    if (!pathValidation.ok) {
-      // No bloqueamos si la carpeta hereda (ej: Documentos/Certificados legacy),
-      // pero lo registramos.
-      console.warn('[upload/staging] validateStoragePath:', pathValidation.error);
-    }
-    rutaStorage = buildStoragePath({
-      sedeId,
-      bloque,
-      disciplina,
-      subcarpeta,
-      archivo: fileName,
-    });
-  } else {
-    rutaStorage = `${storageBasePath}/${state.currentBlockId}/${carpeta}/${fileName}`;
-  }
-  // Diagnóstico: registra el path real que se va a usar en Storage
-  // (visible en consola — §3 del brief). No altera la lógica ni el path.
-  logUploadPath(rutaStorage, {
-    sedeId: state?.currentSede,
-    bloqueId: state?.currentBlockId,
-    carpeta,
-    fileName,
-    tipoArchivo,
-    isStaging,
-  });
-  const fileRef = storageRef(storage, rutaStorage);
-
-  return new Promise((resolve) => {
-    const uploadTask = uploadBytesResumable(fileRef, file);
-
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-
-        // Actualizar barra de progreso
-        const progressBar = document.getElementById('upload-progress-bar');
-        const progressText = document.getElementById('upload-percentage');
-        const statusText = document.getElementById('upload-status-text');
-
-        if (progressBar) progressBar.style.width = progress + '%';
-        if (progressText) progressText.innerText = Math.round(progress) + '%';
-
-        if (statusText) {
-          if (totalFiles === 1) {
-            statusText.innerText = `Subiendo ${file.name}...`;
-          } else {
-            statusText.innerText = `Subiendo archivo ${index + 1} de ${totalFiles}...`;
-          }
-        }
-      },
-      (error) => {
-        console.error('Error al subir archivo:', error);
-        resolve({ success: false, error, fileName: fileName });
-      },
-      async () => {
-        try {
-          const urlDescarga = await getDownloadURL(uploadTask.snapshot.ref);
-
-          // Metadata enriquecida para auditoría IA
-          const [disciplinaRaw, ...subRest] = String(carpeta || '').split('/').filter(Boolean);
-          const subcarpetaRaw = subRest.join('/') || null;
-          const anioMatch = fileName.match(/(20\d{2})/);
-          const anio = anioMatch ? parseInt(anioMatch[1], 10) : null;
-
-          const nuevoRegistro = {
-            bloque: state.currentBlockId,
-            sede: state?.currentSede || null,
-            nombre: fileName,
-            tipo: tipoArchivo,
-            carpeta: carpeta,
-            url: urlDescarga,
-            storagePath: rutaStorage,
-            fechaCreacion: serverTimestamp(),
-            subidoPor: state.user.email,
-            tamaño: file.size,
-            tipoMime: file.type,
-            // Metadata IA
-            ia: {
-              disciplina: disciplinaRaw || null,
-              subcarpeta: subcarpetaRaw,
-              tipoArchivo: tipoArchivo,
-              anio,
-              entorno: isStaging ? 'staging' : 'production',
-              schemaVersion: '1.0.0',
-            },
-          };
-
-          await addDoc(collection(db, dbPath), nuevoRegistro);
-          // Diagnóstico: confirma que el objeto existe en Storage con ese path.
-          logUploadDone(rutaStorage, { fileName, sedeId: state?.currentSede, bloqueId: state?.currentBlockId });
-          resolve({ success: true, fileName: fileName, registro: nuevoRegistro });
-
-        } catch (error) {
-          console.error('Error en Base de datos:', error);
-          resolve({ success: false, error, fileName: fileName });
-        }
-      }
-    );
-  });
-}
-
 /**
  * Valida y prepara archivos para subida múltiple
  */
