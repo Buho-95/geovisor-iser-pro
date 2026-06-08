@@ -1,9 +1,7 @@
 /**
  * Servicio Supabase — frontend (sin bundle, ESM desde CDN).
- * Proporciona auth, base de datos y storage para la migración.
- *
- * IMPORTANTE: Este módulo convive en paralelo con firebase.js.
- * Se activa cuando DB_PROVIDER === 'supabase' en config.js.
+ * Proporciona Auth, PostgreSQL (PostgREST) y Storage para el proyecto.
+ * Stack exclusivo: Supabase + Cloud Run + Vercel.
  */
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';

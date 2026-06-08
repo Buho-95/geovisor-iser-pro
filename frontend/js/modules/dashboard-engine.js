@@ -3,25 +3,15 @@
  *
  * Audita la completitud de un bloque (o una sede completa) contrastando
  * las disciplinas canónicas del schema v3 contra el contenido real en
- * Firebase Storage. No “decora”: devuelve métricas accionables.
+ * Supabase Storage. No “decora”: devuelve métricas accionables.
  *
  * Diseño (respeta el resto del sistema):
  *   • Schema canónico:  loadSchema() → disciplinasBaseBloque (11 disciplinas).
- *     NO se hardcodea la lista: si el schema cambia, el motor lo refleja.
  *   • Rutas de Storage: buildStoragePath() → respeta el prefijo `staging/`
- *     en staging y sin prefijo en producción. Nunca construye rutas crudas.
- *   • Firebase Storage: importado desde el CDN 11.6.1 (igual que el resto
- *     del frontend, sin bundler).
- *   • Presencia de archivos: listAll() con detección rápida — en cuanto
- *     encuentra un item o una subcarpeta con items, marca la disciplina
- *     como "con contenido". No descarga archivos.
- *   • Caché en memoria: evita relisting si se consulta la misma ruta dos
- *     veces seguidas (ej. dashboard + file-explorer).
- *
- * Sin cambios de lógica, auth, events ni Firebase.
+ *     en staging y sin prefijo en producción.
+ *   • Presencia de archivos: listAll() vía Supabase Storage.
+ *   • Caché en memoria: evita relisting si se consulta la misma ruta dos veces.
  */
-
-import { DB_PROVIDER } from '../core/config.js';
 import { buildStoragePath } from '../core/storage-routing.js';
 import { loadSchema, buildSedeTree } from '../core/structure-schema.js';
 import { Logger } from '../core/logger.js';

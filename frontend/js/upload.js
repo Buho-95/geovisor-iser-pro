@@ -1,8 +1,8 @@
 /**
- * Subida de archivos a Storage (Firebase o Supabase) y registro en base de datos.
+ * Subida de archivos a Supabase Storage y registro en base de datos.
  * Integrado con FileManager mejorado - Drag & Drop, Vista Previa, Organización Inteligente
  */
-import { dbPath, storageBasePath, DB_PROVIDER } from './core/config.js';
+import { dbPath, storageBasePath } from './core/config.js';
 import { state } from './core/state.js';
 import { isAdmin } from './services/auth.js';
 import { getFileManager } from './file-manager.js';

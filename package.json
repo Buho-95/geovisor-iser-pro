@@ -1,4 +1,19 @@
 {
+  "name": "geovisor-iser-pro",
+  "version": "2.0.0",
+  "description": "Geovisor ISER Pro — CDE de auditoría normativa. Stack: Supabase + Cloud Run + Vercel.",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "npx serve frontend -l 5000",
+    "dev:backend": "cd backend-cloudrun && node --watch server.js",
+    "build:css": "tailwindcss -i ./frontend/css/styles.css -o ./frontend/css/tailwind.out.css --watch",
+    "build:css:prod": "tailwindcss -i ./frontend/css/styles.css -o ./frontend/css/tailwind.out.css --minify",
+    "deploy:backend": "cd backend-cloudrun && gcloud run deploy geovisor-iser-backend --source . --region us-central1 --allow-unauthenticated",
+    "seed:prod": "node scripts/seed-production-structure.js",
+    "seed:prod:apply": "node scripts/seed-production-structure.js --apply",
+    "apply:schema": "node apply-supabase-schema.js"
+  },
   "dependencies": {
     "@turf/turf": "^7.3.4",
     "@uppy/core": "^5.2.0",
@@ -6,7 +21,6 @@
     "@uppy/xhr-upload": "^5.1.1",
     "axios": "^1.13.6",
     "chart.js": "^4.5.1",
-    "firebase": "^12.10.0",
     "leaflet": "^1.9.4",
     "maplibre-gl": "^5.19.0",
     "papaparse": "^5.5.3",
@@ -18,52 +32,11 @@
   "devDependencies": {
     "tailwindcss": "^3.4.19"
   },
-  "name": "geovisoriser",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "sync-config": "node scripts/sync-config.js",
-    "dev": "npm run sync-config && firebase emulators:start --import=./emulator-data --export-on-exit=./emulator-data --project geovisor-iser",
-    "dev:fresh": "npm run sync-config && firebase emulators:start --project geovisor-iser",
-    "dev:export": "firebase emulators:export ./emulator-data --project geovisor-iser",
-    "preview:deploy": "npm run sync-config && firebase hosting:channel:deploy preview --expires 7d --project geovisor-iser",
-    "staging:deploy:rules": "firebase deploy --only firestore:rules,storage --project geovisor-iser",
-    "staging:deploy:functions": "npm run sync-config && firebase deploy --only functions --project geovisor-iser",
-    "staging:deploy:hosting": "firebase hosting:channel:deploy staging --expires 30d --project geovisor-iser",
-    "staging:deploy": "npm run staging:deploy:rules && npm run staging:deploy:functions && npm run staging:deploy:hosting",
-    "staging:clone:dry": "node scripts/clone-to-staging.js",
-    "staging:clone:apply": "node scripts/clone-to-staging.js --apply",
-    "staging:clone:firestore": "node scripts/clone-to-staging.js --apply --only=firestore",
-    "staging:clone:storage": "node scripts/clone-to-staging.js --apply --only=storage",
-    "staging:seed:validate": "node scripts/validate-staging-structure.js",
-    "staging:seed:smoke": "node scripts/smoke-tree-render.js",
-    "staging:seed:dry": "node scripts/seed-staging-structure.js",
-    "staging:seed:apply": "node scripts/seed-staging-structure.js --apply",
-    "staging:seed:firestore": "node scripts/seed-staging-structure.js --apply --only=firestore",
-    "staging:seed:storage": "node scripts/seed-staging-structure.js --apply --only=storage",
-    "staging:seed:clear": "node scripts/seed-staging-structure.js --apply --clear",
-    "staging:seed:reset": "node scripts/seed-staging-structure.js --apply --clear",
-    "prod:seed:dry": "node scripts/seed-production-structure.js",
-    "prod:seed:apply": "node scripts/seed-production-structure.js --apply",
-    "prod:seed:firestore": "node scripts/seed-production-structure.js --apply --only=firestore",
-    "prod:seed:storage": "node scripts/seed-production-structure.js --apply --only=storage",
-    "prod:seed:clear": "node scripts/seed-production-structure.js --apply --clear",
-    "prod:seed:reset": "node scripts/seed-production-structure.js --apply --clear",
-    "deploy:firebase": "npm run sync-config && firebase deploy --only hosting,functions,firestore,storage --project geovisor-iser",
-    "deploy:prod": "npm run deploy:firebase"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Buho-95/Geovisor-nueva-interfaz-9-03-2026.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/Buho-95/Geovisor-nueva-interfaz-9-03-2026/issues"
-  },
-  "homepage": "https://github.com/Buho-95/Geovisor-nueva-interfaz-9-03-2026#readme"
+  "keywords": ["geovisor", "supabase", "cloud-run", "vercel", "iser", "bim", "sig"],
+  "author": "Pedro Johan Trillos Pérez",
+  "license": "ISC"
 }

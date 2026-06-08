@@ -6,7 +6,7 @@
  * para auditoría normativa colombiana (NSR-10, NTC 6047, RETIE),
  * y renderiza resultados en el Dashboard.
  *
- * NUEVO: Persistencia en Firestore (auditorias_bloques).
+ * Persistencia en Supabase (tabla auditorias_bloques).
  * - Al generar auditoría exitosa, se guarda el resultado en caché.
  * - Al seleccionar un bloque, se consulta primero la caché.
  * - Si hay informe cacheado y los archivos no cambiaron, se muestra directamente.

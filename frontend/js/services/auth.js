@@ -1,13 +1,14 @@
 /**
- * Servicio de autenticación.
- * Soporta Firebase Auth y Supabase Auth en paralelo controlado por DB_PROVIDER.
- * RBAC: rol real desde colección usuarios_iser (Firebase) o tabla usuarios_iser (Supabase).
+ * Servicio de autenticación — Supabase Auth.
+ * RBAC: rol real desde tabla usuarios_iser (Supabase).
  */
 import { state, setUser } from '../core/state.js';
 import { Logger } from '../core/logger.js';
-import { COLLECTIONS, DB_PROVIDER } from '../core/config.js';
+import { COLLECTIONS } from '../core/config.js'; // eslint-disable-line no-unused-vars
 
-const TEMP_ADMIN_EMAILS = ['pedrojtrillos.arq@gmail.com'];
+// Emails de admin de respaldo: solo aplica si la tabla usuarios_iser
+// no devuelve un perfil. Configúralos en config.js para no hardcodear.
+const FALLBACK_ADMIN_EMAILS = [];
 
 function enforceAuthGuard() {
   const appContainer = document.getElementById('app-container');
@@ -178,12 +179,12 @@ async function _initAuthSupabase(callbacks = {}) {
         const profile = await getUserProfile(sbUser.id);
         state.userProfile = profile;
         const email = (sbUser.email || '').toLowerCase();
-        const fallbackAdmin = TEMP_ADMIN_EMAILS.includes(email);
+        const fallbackAdmin = FALLBACK_ADMIN_EMAILS.includes(email);
         state.userRole = profile?.role === 'admin' || fallbackAdmin ? 'admin' : 'viewer';
       } catch (err) {
         Logger.warn('No se pudo leer usuarios_iser (Supabase):', err);
         const email = (sbUser.email || '').toLowerCase();
-        state.userRole = TEMP_ADMIN_EMAILS.includes(email) ? 'admin' : 'viewer';
+        state.userRole = FALLBACK_ADMIN_EMAILS.includes(email) ? 'admin' : 'viewer';
       }
 
       setUser(sbUser);

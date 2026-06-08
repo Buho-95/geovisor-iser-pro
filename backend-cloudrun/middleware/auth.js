@@ -7,7 +7,13 @@ const RATE_MAX = 30;
 const RATE_MAX_UID = 40;
 const rateBuckets = new Map();
 const rateBucketsUid = new Map();
-const TEMP_ADMIN_EMAILS = ['pedrojtrillos.arq@gmail.com'];
+
+// Emails de admin de respaldo (configurable vía env var ADMIN_EMAILS, separados por coma)
+// Solo actúa si la tabla usuarios_iser no devuelve un perfil con role='admin'.
+const ADMIN_EMAILS_ENV = process.env.ADMIN_EMAILS || '';
+const FALLBACK_ADMIN_EMAILS = ADMIN_EMAILS_ENV
+  ? ADMIN_EMAILS_ENV.split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+  : [];
 
 function logStructured(event, payload) {
   console.log(JSON.stringify({ ts: new Date().toISOString(), event, ...payload }));
@@ -142,7 +148,7 @@ async function verifyAnyUser(req, res, next) {
   }
 
   const email = user.email || '';
-  if (TEMP_ADMIN_EMAILS.includes(email.toLowerCase())) {
+  if (FALLBACK_ADMIN_EMAILS.length > 0 && FALLBACK_ADMIN_EMAILS.includes(email.toLowerCase())) {
     role = 'admin';
   }
 
@@ -176,22 +182,24 @@ async function verifyAdmin(req, res, next) {
   }
 
   const email = user.email || '';
-  let isAdmin = TEMP_ADMIN_EMAILS.includes(email.toLowerCase());
+  let isAdmin = false;
 
-  if (!isAdmin) {
-    try {
-      const { data: profile } = await supabaseAdmin
-        .from('usuarios_iser')
-        .select('role')
-        .eq('uid', user.id)
-        .single();
+  try {
+    const { data: profile } = await supabaseAdmin
+      .from('usuarios_iser')
+      .select('role')
+      .eq('uid', user.id)
+      .single();
 
-      if (profile && profile.role === 'admin') {
-        isAdmin = true;
-      }
-    } catch (e) {
-      logStructured('usuarios_iser_read_warn', { message: e.message });
+    if (profile && profile.role === 'admin') {
+      isAdmin = true;
     }
+  } catch (e) {
+    logStructured('usuarios_iser_read_warn', { message: e.message });
+  }
+
+  if (!isAdmin && FALLBACK_ADMIN_EMAILS.length > 0 && FALLBACK_ADMIN_EMAILS.includes(email.toLowerCase())) {
+    isAdmin = true;
   }
 
   if (!isAdmin) {

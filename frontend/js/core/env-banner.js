@@ -58,7 +58,7 @@ export function mountEnvBanner() {
   // ─── Badge persistente esquina ──────────────────────────────────
   const badge = document.createElement('div');
   badge.id = 'env-badge';
-  badge.title = `Entorno: ${cfg.label}\nFirestore: ${NS_INFO.firestorePrefix || '(sin prefijo)'}\nStorage: ${NS_INFO.storagePrefix || '(sin prefijo)'}`;
+  badge.title = `Entorno: ${cfg.label}\nSupabase tablas: ${NS_INFO.firestorePrefix || '(sin prefijo)'}\nStorage: ${NS_INFO.storagePrefix || '(sin prefijo)'}`;
   badge.style.cssText = [
     'position:fixed',
     'bottom:12px', 'right:12px',
@@ -99,7 +99,7 @@ export function mountEnvBanner() {
 
   if (typeof window !== 'undefined' && window.console) {
     console.log(
-      `%c ${cfg.label} %c  Firestore=${NS_INFO.firestorePrefix || '(none)'}  Storage=${NS_INFO.storagePrefix || '(none)'} `,
+      `%c ${cfg.label} %c  Supabase-tablas=${NS_INFO.firestorePrefix || '(none)'}  Storage=${NS_INFO.storagePrefix || '(none)'} `,
       `background:${cfg.color};color:#fff;font-weight:bold;padding:4px 8px;border-radius:3px 0 0 3px`,
       'background:#1e293b;color:#e2e8f0;padding:4px 8px;border-radius:0 3px 3px 0'
     );

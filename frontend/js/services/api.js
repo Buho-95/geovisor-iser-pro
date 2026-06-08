@@ -1,32 +1,19 @@
 /**
- * Peticiones autenticadas a Cloud Functions (URL directa, sin depender de Hosting rewrites).
- * Soporta tanto Firebase Auth (DB_PROVIDER='firebase') como Supabase Auth (DB_PROVIDER='supabase').
+ * Peticiones autenticadas al backend Cloud Run.
+ * Auth: Supabase JWT (Bearer token).
  */
 import { Logger } from '../core/logger.js';
-import { shouldUseEmulators, EMULATOR_PORTS, ENV_MODE, isStaging } from '../core/env.js';
-import { DB_PROVIDER, CLOUD_RUN_BASE_URL } from '../core/config.js';
+import { ENV_MODE, isStaging } from '../core/env.js';
+import { CLOUD_RUN_BASE_URL } from '../core/config.js';
 
-/**
- * Env enviado al backend: dev se trata como "production" namespace
- * (backend no conoce "development"; los emuladores ya aíslan datos).
- * Solo "staging" activa el prefijo server-side.
- */
 export const BACKEND_ENV = isStaging ? 'staging' : 'production';
 
-const FUNCTIONS_REGION = 'us-central1';
-
-/** Endpoints del nuevo backend Express en Cloud Run (para DB_PROVIDER='supabase') */
 const CLOUD_RUN_ENDPOINTS = {
   getBlockInventory: `${CLOUD_RUN_BASE_URL}/api/getBlockInventory`,
   getNormativeAudit: `${CLOUD_RUN_BASE_URL}/api/getNormativeAudit`,
 };
 
-/** Única fuente de URLs para las APIs (conmuta automáticamente según proveedor y entorno). */
 export const API_ENDPOINTS = CLOUD_RUN_ENDPOINTS;
-
-if (shouldUseEmulators) {
-  Logger.info('🧪 API_ENDPOINTS apuntando a emulador de Functions:', API_ENDPOINTS);
-}
 
 function resolveApiUrl(url) {
   if (typeof url !== 'string') return url;
@@ -36,19 +23,14 @@ function resolveApiUrl(url) {
   return url;
 }
 
-async function waitForAuthReady(timeoutMs = 12000) {
-  // Si DB_PROVIDER es supabase, esperar al usuario de Supabase Auth
+async function waitForAuthReady() {
   const { getCurrentSupabaseUser } = await import('./supabase.js');
   const user = await getCurrentSupabaseUser();
   if (user) return user;
-  // Esperar un poco y volver a intentar (Supabase restaura la sesión en ~500ms)
   await new Promise(resolve => setTimeout(resolve, 800));
   return await getCurrentSupabaseUser();
 }
 
-/**
- * Inyecta `env` en el body JSON si el caller no lo pasó ya.
- */
 function withEnvBody(options) {
   if (!options || !options.body) return options;
   try {
@@ -64,21 +46,15 @@ function withEnvBody(options) {
 async function fetchWithIdToken(url, options, requireNonAnonymous) {
   const finalUrl = resolveApiUrl(url);
   const user = await waitForAuthReady();
-  if (!user) {
-    throw new Error('Se requiere sesión');
-  }
+  if (!user) throw new Error('Se requiere sesión');
 
-  let token;
-  // Usar el access_token JWT de Supabase
   const { getSupabaseToken } = await import('./supabase.js');
-  token = await getSupabaseToken();
+  let token = await getSupabaseToken();
   const isAnon = user.is_anonymous || !user.email;
-  if (requireNonAnonymous && isAnon) {
-    throw new Error('Se requiere sesión de administrador');
-  }
+  if (requireNonAnonymous && isAnon) throw new Error('Se requiere sesión de administrador');
 
   const enrichedOptions = withEnvBody(options);
-  Logger.debug('API autenticada', { url: finalUrl, env: BACKEND_ENV, provider: DB_PROVIDER });
+  Logger.debug('API autenticada', { url: finalUrl, env: BACKEND_ENV });
 
   let headers = {
     'Content-Type': 'application/json',
@@ -88,17 +64,11 @@ async function fetchWithIdToken(url, options, requireNonAnonymous) {
   };
 
   let res = await fetch(finalUrl, { ...enrichedOptions, headers });
+
   if (res.status === 401) {
     Logger.warn(`401 en ${finalUrl}, refrescando token y reintentando`);
-    // Refrescar token según proveedor
-    const { getSupabaseToken } = await import('./supabase.js');
     token = await getSupabaseToken(true);
-    headers = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      'X-Geovisor-Env': BACKEND_ENV,
-      ...enrichedOptions.headers,
-    };
+    headers = { ...headers, Authorization: `Bearer ${token}` };
     res = await fetch(finalUrl, { ...enrichedOptions, headers });
   }
 
@@ -114,12 +84,10 @@ async function fetchWithIdToken(url, options, requireNonAnonymous) {
   return res;
 }
 
-/** Solo usuarios con correo (no visitante anónimo). Cloud Functions de auditoría IA. */
 export async function authenticatedFetch(url, options = {}) {
   return fetchWithIdToken(url, options, true);
 }
 
-/** Cualquier sesión (incl. visitante): inventario de bloque. */
 export async function authenticatedFetchAny(url, options = {}) {
   return fetchWithIdToken(url, options, false);
 }
