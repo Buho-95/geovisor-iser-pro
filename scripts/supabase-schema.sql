@@ -116,11 +116,29 @@ CREATE TABLE IF NOT EXISTS public.estructura_base (
 CREATE TABLE IF NOT EXISTS public.estructura_dinamica (
     id text PRIMARY KEY,
     sede_id text NOT NULL,
-    bloque_id text NOT NULL,
-    disciplina_id text NOT NULL,
-    nombre_carpeta text NOT NULL,
+    bloque_id text NOT NULL DEFAULT '',
+    disciplina_id text NOT NULL DEFAULT '',
+    nombre_carpeta text NOT NULL DEFAULT '',
+    -- Columnas extendidas para el gestor de carpetas dinámicas
+    parent_path text,
+    nombre text,
+    path text,
+    numero integer,
+    creado_por text,
+    creado_en timestamptz,
     created_at timestamptz DEFAULT now()
 );
+
+-- Migración no-destructiva: agregar columnas si la tabla ya existe sin ellas
+ALTER TABLE public.estructura_dinamica ADD COLUMN IF NOT EXISTS parent_path text;
+ALTER TABLE public.estructura_dinamica ADD COLUMN IF NOT EXISTS nombre text;
+ALTER TABLE public.estructura_dinamica ADD COLUMN IF NOT EXISTS path text;
+ALTER TABLE public.estructura_dinamica ADD COLUMN IF NOT EXISTS numero integer;
+ALTER TABLE public.estructura_dinamica ADD COLUMN IF NOT EXISTS creado_por text;
+ALTER TABLE public.estructura_dinamica ADD COLUMN IF NOT EXISTS creado_en timestamptz;
+CREATE INDEX IF NOT EXISTS idx_estructura_dinamica_sede ON public.estructura_dinamica(sede_id);
+
+
 
 -- ═══════════════════════════════════════════════════════════════
 -- INDEXACIÓN Y OPTIMIZACIONES

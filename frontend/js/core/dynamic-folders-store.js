@@ -2,9 +2,9 @@
  * dynamic-folders-store.js — CRUD de carpetas dinámicas staging (zonas "rojo" del PDF).
  *
  * Tabla Supabase: estructura_dinamica
- *   id = "{sedeId}__{parentPathSanitizado}__{nombre}"
+ *   id = "{parentPathSanitizado}__{nombre}"
  *   columnas: id, sede_id, parent_path, nombre, path, numero,
- *             creado_por, creado_en, metadata
+ *             creado_por, creado_en
  *
  * Uso:
  *   const folders = await listDynamicFolders('pamplona');
@@ -36,12 +36,12 @@ export async function listDynamicFolders(sedeId) {
     return (data || []).map(row => ({
       id: row.id,
       sedeId: row.sede_id,
-      parentPath: row.parent_path,
-      nombre: row.nombre,
-      path: row.path,
-      numero: row.numero,
-      creadoPor: row.creado_por,
-      creadoEn: row.creado_en,
+      parentPath: row.parent_path || row.bloque_id || '',
+      nombre: row.nombre || row.nombre_carpeta || '',
+      path: row.path || `${row.bloque_id || ''}/${row.nombre_carpeta || ''}`,
+      numero: row.numero ?? null,
+      creadoPor: row.creado_por || '',
+      creadoEn: row.creado_en || row.created_at || null,
     }));
   } catch (err) {
     console.warn('[dynamic-folders-store] listDynamicFolders falló, devolviendo []:', err?.message || err);
@@ -76,8 +76,12 @@ export async function createDynamicFolder({ sedeId, parentPath, nombre, existing
   const payload = {
     id,
     sede_id: sedeId,
+    // Columnas compatibles con ambas versiones del schema
     parent_path: parentPath,
+    bloque_id: parentPath.split('/')[0] || parentPath,
+    disciplina_id: parentPath.split('/').slice(1).join('/') || '',
     nombre,
+    nombre_carpeta: nombre,
     path: `${parentPath}/${nombre}`,
     numero: numero ? parseInt(numero, 10) : null,
     creado_por: state?.user?.email || 'desconocido',
@@ -85,7 +89,7 @@ export async function createDynamicFolder({ sedeId, parentPath, nombre, existing
   };
 
   const sb = getSupabaseClient();
-  const { error } = await sb.from(TABLE).insert(payload);
+  const { error } = await sb.from(TABLE).upsert(payload, { onConflict: 'id' });
   if (error) throw error;
 
   return {
