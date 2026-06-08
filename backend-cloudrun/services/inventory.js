@@ -140,16 +140,20 @@ async function buildInventoryForBlock(blockId, blockName, sede, env) {
     `${canonicalBase}/${s}/${blockId}`
   );
 
-  // 2. Escanear rutas legadas (documentos_iser/{blockId}/, etc.)
+  // 2. Escanear rutas legadas.
+  // Los archivos actuales viven en la raíz del bucket: {blockId}/
+  // (sin prefijo de sede ni de bucket). Se intenta primero esa ruta.
   const legacyAttempts = [
+    { prefix: `${blockId}/`, label: blockId },
+    { prefix: `${s}/${blockId}/`, label: `${s}/${blockId}` },
     { prefix: `${legacyBase}/${blockId}/`, label: `${legacyBase}/${blockId}` },
     { prefix: `${legacyBase}/${s}/${blockId}/`, label: `${legacyBase}/${s}/${blockId}` },
   ];
   if (blockName && blockName !== blockId) {
-    legacyAttempts.push({
-      prefix: `${legacyBase}/${blockName}/`,
-      label: `${legacyBase}/${blockName}`,
-    });
+    legacyAttempts.push(
+      { prefix: `${blockName}/`, label: blockName },
+      { prefix: `${legacyBase}/${blockName}/`, label: `${legacyBase}/${blockName}` }
+    );
   }
 
   let legacyInv = null;
