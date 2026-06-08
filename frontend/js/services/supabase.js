@@ -72,8 +72,8 @@ export async function signOutSupabase() {
  */
 export function onSupabaseAuthChange(callback) {
   const sb = getSupabaseClient();
-  const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
-    callback(session?.user ?? null);
+  const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
+    callback(session?.user ?? null, event);
   });
   return () => subscription.unsubscribe();
 }

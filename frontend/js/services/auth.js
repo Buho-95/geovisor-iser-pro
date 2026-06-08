@@ -168,11 +168,19 @@ async function _initAuthSupabase(callbacks = {}) {
   if (btnExitVisitor) btnExitVisitor.addEventListener('click', performLogoutSB);
   document.getElementById('btn-logout')?.addEventListener('click', performLogoutSB);
 
-  // Escuchar cambios de sesión
-  onSupabaseAuthChange(async (sbUser) => {
-    Logger.debug('Supabase Auth change:', sbUser);
+  // Escuchar cambios de sesión.
+  // onLoginSuccess (→ doInitGlobalView) solo se llama en el primer inicio de sesión,
+  // nunca en TOKEN_REFRESHED ni USER_UPDATED, para no resetear el mapa con un bloque
+  // ya seleccionado.
+  let sessionEstablished = false;
+
+  onSupabaseAuthChange(async (sbUser, authEvent) => {
+    Logger.debug('Supabase Auth change:', authEvent, sbUser?.id);
     state.user = sbUser;
     const loadingScreen = document.getElementById('loading-screen');
+    // Solo inicializar la vista principal en el primer evento de sesión activa
+    const isFirstSession = !sessionEstablished &&
+      (authEvent === 'SIGNED_IN' || authEvent === 'INITIAL_SESSION');
 
     if (sbUser && !sbUser.is_anonymous) {
       try {
@@ -192,7 +200,7 @@ async function _initAuthSupabase(callbacks = {}) {
       document.getElementById('auth-screen')?.classList.add('hidden-auth');
       document.getElementById('app-container')?.classList.add('visible');
       if (loadingScreen) loadingScreen.classList.add('loading-hidden');
-      onLoginSuccess?.();
+      if (isFirstSession) { sessionEstablished = true; onLoginSuccess?.(); }
 
     } else if (sbUser?.is_anonymous) {
       state.userProfile = null;
@@ -202,9 +210,10 @@ async function _initAuthSupabase(callbacks = {}) {
       document.getElementById('auth-screen')?.classList.add('hidden-auth');
       document.getElementById('app-container')?.classList.add('visible');
       if (loadingScreen) loadingScreen.classList.add('loading-hidden');
-      onLoginSuccess?.();
+      if (isFirstSession) { sessionEstablished = true; onLoginSuccess?.(); }
 
     } else {
+      sessionEstablished = false;
       enforceAuthGuard();
       document.getElementById('auth-screen')?.classList.remove('hidden-auth');
       if (loadingScreen) loadingScreen.classList.add('loading-hidden');
