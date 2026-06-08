@@ -18,7 +18,7 @@ export const supabaseConfig = {
 };
 
 // ── Backend Cloud Run ────────────────────────────────────────────────────────
-export const CLOUD_RUN_BASE_URL = 'https://geovisor-iser-backend-303456177094.us-central1.run.app';
+export const CLOUD_RUN_BASE_URL = 'https://geovisor-iser-backend-644621539761.us-central1.run.app';
 
 export const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'iser-cde-pro';
 
