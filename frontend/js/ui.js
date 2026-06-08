@@ -451,7 +451,9 @@ async function loadFirstFileFromPath(blockId, path, tab, container) {
   `.trim();
 
   // Load ALL files from this path for navigation
+  console.log(`[DIAG] loadFirstFileFromPath blockId=${blockId} path="${path}" tab=${tab} archivosNube.length=${(state.archivosNube||[]).length}`);
   let allFiles = getFilesInPath(blockId, path);
+  console.log(`[DIAG] getFilesInPath → ${allFiles.length} resultados`, allFiles.slice(0,3).map(f=>({bloque:f.bloque,carpeta:f.carpeta,nombre:f.nombre})));
 
   // 🛡️ Strict .glb filter for 3D tab — only render 3D models
   if (tab === '3d') {

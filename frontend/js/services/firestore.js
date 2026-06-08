@@ -107,6 +107,8 @@ export function initArchivosSubscription(onUpdate) {
       // Normalizar bloque → ID original corto para que el fileMapper
       // y las vistas de UI encuentren los archivos correctamente.
       const docs = rawDocs.map(d => ({ ...d, bloque: blockId }));
+      // DEBUG: mostrar en consola qué devuelve Cloud Run
+      console.log(`[DIAG] blockId=${blockId} → total archivos=${rawDocs.length}`, rawDocs.slice(0, 5).map(d => ({ carpeta: d.carpeta, nombre: d.nombre })));
       state.archivosNube = docs;
       setArchivos(docs);
       applyCloudStatus(true);
