@@ -331,18 +331,20 @@ export async function openViewer(file) {
     }
   }
 
-  // Fallback type detection from file extension (for files uploaded before type detection)
   let fileType = file.tipo || 'otro';
-  if (fileType === 'otro' && file.nombre) {
-    const name = file.nombre.toLowerCase();
-    if (name.endsWith('.glb') || name.endsWith('.gltf')) fileType = 'glb';
-    else if (name.endsWith('.xlsx') || name.endsWith('.xls')) fileType = 'excel';
-    else if (name.endsWith('.csv')) fileType = 'csv';
-    else if (name.endsWith('.pdf')) fileType = 'pdf';
-    else if (name.endsWith('.doc') || name.endsWith('.docx')) fileType = 'word';
-    else if (name.endsWith('.ppt') || name.endsWith('.pptx')) fileType = 'ppt';
-    else if (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') || name.endsWith('.gif')) fileType = 'img';
-    else if (name.endsWith('.mp4') || name.endsWith('.webm') || name.endsWith('.ogg')) fileType = 'video';
+  // Always use extension for 3D model detection — overrides any stored tipo value.
+  // Other types only use extension as fallback when tipo is 'otro'.
+  const fname = (file.nombre || '').toLowerCase();
+  if (fname.endsWith('.glb') || fname.endsWith('.gltf')) {
+    fileType = 'glb';
+  } else if (fileType === 'otro' && file.nombre) {
+    if (fname.endsWith('.xlsx') || fname.endsWith('.xls')) fileType = 'excel';
+    else if (fname.endsWith('.csv')) fileType = 'csv';
+    else if (fname.endsWith('.pdf')) fileType = 'pdf';
+    else if (fname.endsWith('.doc') || fname.endsWith('.docx')) fileType = 'word';
+    else if (fname.endsWith('.ppt') || fname.endsWith('.pptx')) fileType = 'ppt';
+    else if (fname.endsWith('.jpg') || fname.endsWith('.jpeg') || fname.endsWith('.png') || fname.endsWith('.gif')) fileType = 'img';
+    else if (fname.endsWith('.mp4') || fname.endsWith('.webm') || fname.endsWith('.ogg')) fileType = 'video';
   }
 
   document.getElementById('visor-tipo-label').textContent = fileType.toUpperCase();

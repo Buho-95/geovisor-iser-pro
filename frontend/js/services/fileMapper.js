@@ -46,7 +46,8 @@ export function getPathsForFilter(filterType, sedePrefix = '') {
         case '3d':
             return [
                 build('01_Arquitectonico/02_Modelo_3D_SketchUP', 'Arq 3D SketchUp (.glb)'),
-                build('02_Estructural/02_Modelo_3D_SketchUP', 'Est 3D SketchUp')
+                build('02_Estructural/02_Modelo_3D_SketchUP', 'Est 3D SketchUp'),
+                build('01_Arquitectonico/02_Modelo_3D_Blender', 'Arq 3D Blender (.glb)')
             ];
         case 'renders':
             return [

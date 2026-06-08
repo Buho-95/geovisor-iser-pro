@@ -9,8 +9,6 @@ import { generarMenuPlanoteca } from './planoteca-structure.js';
 import { getPathsForFilter, getFirstFileInPath, getFilesInPath, normalizeKey } from './services/fileMapper.js';
 import { escapeHtml } from './core/safe-dom.js';
 
-import { DB_PROVIDER } from './core/config.js';
-
 let blockPreviewDispose3D = null;
 let blockPreviewWired = false;
 let blockPreviewActiveTab = '3d';
@@ -29,12 +27,8 @@ async function resolveFileUrlForPreview(file) {
   if (!file) return null;
   if (file.url) return file.url;
   if (file.storagePath) {
-    if (DB_PROVIDER === 'supabase') {
-      const { getSupabasePublicUrl } = await import('./services/supabase.js');
-      return getSupabasePublicUrl(file.storagePath);
-    }
-    const r = storageRef(storage, file.storagePath);
-    return await getDownloadURL(r);
+    const { getSupabasePublicUrl } = await import('./services/supabase.js');
+    return getSupabasePublicUrl(file.storagePath);
   }
   return null;
 }
@@ -463,6 +457,20 @@ async function loadFirstFileFromPath(blockId, path, tab, container) {
       const name = String(f.nombre || f.name || '').toLowerCase();
       return name.endsWith('.glb') || name.endsWith('.gltf');
     });
+
+    // Fallback: if the specific path has no GLB, search any GLB file in the block.
+    // This handles cases where files are stored in non-standard subfolders.
+    if (allFiles.length === 0) {
+      const allBlockFiles = Array.isArray(state.archivosNube) ? state.archivosNube : [];
+      allFiles = allBlockFiles.filter(f => {
+        if (!f) return false;
+        const fBloque = String(f.bloque || '').toLowerCase();
+        const bid = blockId.toLowerCase();
+        if (fBloque !== bid) return false;
+        const name = String(f.nombre || f.name || '').toLowerCase();
+        return name.endsWith('.glb') || name.endsWith('.gltf');
+      });
+    }
   }
 
   miniVisorFiles = allFiles;
@@ -684,12 +692,8 @@ class DocPreviewModal {
   async _resolveUrl(file) {
     if (file?.url) return file.url;
     if (file?.storagePath) {
-      if (DB_PROVIDER === 'supabase') {
-        const { getSupabasePublicUrl } = await import('./services/supabase.js');
-        return getSupabasePublicUrl(file.storagePath);
-      }
-      const r = storageRef(storage, file.storagePath);
-      return await getDownloadURL(r);
+      const { getSupabasePublicUrl } = await import('./services/supabase.js');
+      return getSupabasePublicUrl(file.storagePath);
     }
     return null;
   }
