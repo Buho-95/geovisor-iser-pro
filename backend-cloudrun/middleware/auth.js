@@ -3,8 +3,8 @@
 const { supabaseAdmin } = require('../services/supabase');
 
 const RATE_WINDOW_MS = 60 * 1000;
-const RATE_MAX = 30;
-const RATE_MAX_UID = 40;
+const RATE_MAX = 120;
+const RATE_MAX_UID = 100;
 const rateBuckets = new Map();
 const rateBucketsUid = new Map();
 

@@ -23,6 +23,7 @@ let inventoryListenersInitialized = false;
 let offBlockSelected = null;
 let offAuthChanged = null;
 let activeInventoryRequest = 0;
+let subscribeDebounceTimer = null;
 
 function applyCloudStatus(ok) {
   const status = document.getElementById('cloud-status');
@@ -125,7 +126,12 @@ export function initArchivosSubscription(onUpdate) {
     }
   };
 
-  offBlockSelected = on(EVENTS.BLOCK_SELECTED, (blockId) => subscribe(blockId));
+  const debouncedSubscribe = (blockId) => {
+    clearTimeout(subscribeDebounceTimer);
+    subscribeDebounceTimer = setTimeout(() => subscribe(blockId), 300);
+  };
+
+  offBlockSelected = on(EVENTS.BLOCK_SELECTED, (blockId) => debouncedSubscribe(blockId));
   offAuthChanged = on(EVENTS.AUTH_STATE_CHANGED, (user) => {
     if (!user) {
       state.archivosNube = [];
