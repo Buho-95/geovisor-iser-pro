@@ -88,24 +88,15 @@ export function initArchivosSubscription(onUpdate) {
       return;
     }
 
-    // Resolver ID corto del mapa (ej: 'admin') → ID canónico de Storage
-    // (ej: '04_Bloque_Administrativo') para que Cloud Run escanee la ruta real.
-    let canonicalBlockId = blockId;
-    try {
-      const { resolveBloqueCanonical } = await import('../core/structure-schema.js');
-      const resolved = await resolveBloqueCanonical(state.currentSede || 'pamplona', blockId);
-      if (resolved) canonicalBlockId = resolved;
-    } catch (e) {
-      Logger.warn('[firestore] resolveBloqueCanonical falló, usando blockId original');
-    }
-
-    Logger.debug(`[firestore] subscribe: ${blockId} → canonical: ${canonicalBlockId}`);
+    // Usar el blockId corto directamente: los archivos se suben a
+    // sedes/{sede}/{blockId}/{carpeta}/ usando state.currentBlockId (ID corto).
+    Logger.debug(`[firestore] subscribe: ${blockId}`);
     try {
       const response = await authenticatedFetchAny(INVENTORY_FUNCTION_URL, {
         method: 'POST',
         body: JSON.stringify({
-          blockId: canonicalBlockId,
-          blockName: canonicalBlockId,
+          blockId: blockId,
+          blockName: blockId,
           sede: state.currentSede || 'pamplona',
         }),
       });

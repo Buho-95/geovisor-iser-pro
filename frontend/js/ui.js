@@ -326,8 +326,10 @@ async function renderBlockPreviewForTab(blockId, tab) {
     return;
   }
 
-  // Obtener rutas de carpeta para este tab (desde fileMapper.js)
-  const paths = getPathsForFilter(tab, state.currentSede || '');
+  // Obtener rutas de carpeta para este tab.
+  // NO se pasa sedePrefix: Cloud Run devuelve 'carpeta' relativo a la raíz del bloque,
+  // sin incluir el prefijo de sede (ej. '01_Arquitectonico/02_Modelo_3D_SketchUP').
+  const paths = getPathsForFilter(tab);
 
   if (paths.length === 0) {
     if (folderContainer) folderContainer.style.display = 'none';
