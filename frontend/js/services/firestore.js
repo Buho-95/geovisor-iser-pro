@@ -81,27 +81,41 @@ export function initArchivosSubscription(onUpdate) {
 
     setLoading(true, 'Conectando...');
     if (!blockId) {
-      console.warn('No hay bloque seleccionado aún');
       state.archivosNube = [];
       setArchivos([]);
       setLoading(false);
       onUpdate?.();
       return;
     }
-    console.log('BLOCK SELECTED:', blockId);
+
+    // Resolver ID corto del mapa (ej: 'admin') → ID canónico de Storage
+    // (ej: '04_Bloque_Administrativo') para que Cloud Run escanee la ruta real.
+    let canonicalBlockId = blockId;
+    try {
+      const { resolveBloqueCanonical } = await import('../core/structure-schema.js');
+      const resolved = await resolveBloqueCanonical(state.currentSede || 'pamplona', blockId);
+      if (resolved) canonicalBlockId = resolved;
+    } catch (e) {
+      Logger.warn('[firestore] resolveBloqueCanonical falló, usando blockId original');
+    }
+
+    Logger.debug(`[firestore] subscribe: ${blockId} → canonical: ${canonicalBlockId}`);
     try {
       const response = await authenticatedFetchAny(INVENTORY_FUNCTION_URL, {
         method: 'POST',
         body: JSON.stringify({
-          blockId,
-          blockName: blockId,
+          blockId: canonicalBlockId,
+          blockName: canonicalBlockId,
           sede: state.currentSede || 'pamplona',
         }),
       });
       const payload = await response.json();
       if (requestId !== activeInventoryRequest) return;
       const inventario = payload?.inventario;
-      const docs = Array.isArray(inventario?.archivos) ? inventario.archivos : [];
+      const rawDocs = Array.isArray(inventario?.archivos) ? inventario.archivos : [];
+      // Normalizar bloque → ID original corto para que el fileMapper
+      // y las vistas de UI encuentren los archivos correctamente.
+      const docs = rawDocs.map(d => ({ ...d, bloque: blockId }));
       state.archivosNube = docs;
       setArchivos(docs);
       applyCloudStatus(true);

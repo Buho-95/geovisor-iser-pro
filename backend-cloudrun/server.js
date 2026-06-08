@@ -28,17 +28,18 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5000',
   'http://localhost:3000',
   'http://127.0.0.1:5000',
-  'https://geovisor-iser.web.app',
-  'https://geovisor-iser.firebaseapp.com',
-  // URL de Vercel (añadir cuando esté disponible)
   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
   process.env.FRONTEND_ORIGIN || null,
 ].filter(Boolean);
 
+// Permite cualquier deployment de Vercel (production + preview) ya que
+// todas las operaciones sensibles requieren JWT Supabase válido.
+const VERCEL_ORIGIN_RE = /^https:\/\/[a-z0-9][a-z0-9-]*\.vercel\.app$/i;
+
 const corsOptions = {
   origin: (origin, callback) => {
-    // Permitir solicitudes sin origin (Postman, curl, etc.) en desarrollo
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+    // Sin origin → Postman / curl / mismo servidor (OK)
+    if (!origin || ALLOWED_ORIGINS.includes(origin) || VERCEL_ORIGIN_RE.test(origin)) {
       callback(null, true);
     } else {
       callback(new Error(`CORS no permitido para origen: ${origin}`));

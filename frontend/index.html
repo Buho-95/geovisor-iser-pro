@@ -59,7 +59,7 @@
 <body>
 
     <!-- ═══════════════════════════════════════════════════════
-         LOADING SCREEN — Shown while Firebase verifies session
+         LOADING SCREEN — Shown while Supabase verifies session
          ═══════════════════════════════════════════════════════ -->
     <div id="loading-screen">
         <div class="loading-spinner"></div>
@@ -707,15 +707,6 @@
             </form>
         </div>
     </div>
-
-    <!-- ═══════════════════════════════════════════════════════
-         APP CHECK DEBUG TOKEN — Debe ejecutarse ANTES de cualquier
-         módulo de Firebase. Los ES Modules hacen hoisting de sus imports,
-         por lo que este script clásico (síncrono) es el único que corre primero.
-         ═══════════════════════════════════════════════════════ -->
-    <script>
-      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-    </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"

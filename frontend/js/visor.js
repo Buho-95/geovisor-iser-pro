@@ -1,7 +1,6 @@
 import { state } from './core/state.js';
 import { emit, EVENTS } from './core/events.js';
 import { Logger } from './core/logger.js';
-import { DB_PROVIDER } from './core/config.js';
 import { init3DViewer } from './viewer3D.js';
 
 // Instancias globales de los visores para limpieza de memoria
@@ -125,40 +124,12 @@ async function initCadViewer(fileUrl) {
   cadCanvas.classList.remove('hidden');
 }
 
-// ✅ Inicializar visor BIM 3D para IFC
-async function initBimViewer(fileUrl) {
-  const { Components, IfcLoader, OrbitControls, RoomSerializer } = await import('@thatopen/components');
-
-  // Crear instancia de componentes BIM
-  bimViewerInstance = new Components();
-
-  // Inicializar el canvas de Three.js
-  const renderer = bimViewerInstance.get('Renderer');
-  renderer.setSize(bimContainer.clientWidth, bimContainer.clientHeight);
-  bimContainer.appendChild(renderer.domElement);
-
-  // Agregar controles de órbita
-  const orbitControls = new OrbitControls(bimViewerInstance);
-  orbitControls.enabled = true;
-
-  // Cargar el archivo IFC
-  const ifcLoader = new IfcLoader(bimViewerInstance);
-  const response = await fetch(fileUrl);
-  const blob = await response.blob();
-  const model = await ifcLoader.load(blob);
-
-  // Ajustar vista automáticamente
-  bimViewerInstance.fragmentManager.fitFragments();
+// ✅ Inicializar visor BIM 3D para IFC — usa bim-viewer/index.js (web-ifc + Three.js)
+async function initBimViewer(fileUrl, file) {
+  const { openBimViewer } = await import('./modules/bim-viewer/index.js');
+  // El módulo bim-viewer crea su propio modal; le pasamos el objeto file completo.
+  openBimViewer(file || { url: fileUrl, nombre: fileUrl.split('/').pop() });
   currentViewerType = 'bim';
-
-  // Agregar controles
-  viewerControls.classList.remove('hidden');
-  tabBim.classList.remove('hidden');
-  tabIframe.classList.add('hidden');
-  tabBim.classList.add('active', 'bg-blue-50', 'text-blue-700');
-  tabCad.classList.add('hidden');
-  mensajeEl.classList.add('hidden');
-  bimContainer.classList.remove('hidden');
 }
 
 // ✅ Renderizar Excel/CSV con SheetJS usando renderizado por fragmentos (chunks)
