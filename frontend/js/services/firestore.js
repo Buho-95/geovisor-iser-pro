@@ -24,6 +24,7 @@ let offBlockSelected = null;
 let offAuthChanged = null;
 let activeInventoryRequest = 0;
 let subscribeDebounceTimer = null;
+let previousAuthUid = null;
 
 function applyCloudStatus(ok) {
   const status = document.getElementById('cloud-status');
@@ -133,15 +134,21 @@ export function initArchivosSubscription(onUpdate) {
 
   offBlockSelected = on(EVENTS.BLOCK_SELECTED, (blockId) => debouncedSubscribe(blockId));
   offAuthChanged = on(EVENTS.AUTH_STATE_CHANGED, (user) => {
+    const newUid = user?.id ?? null;
     if (!user) {
+      previousAuthUid = null;
       state.archivosNube = [];
       setArchivos([]);
       setLoading(false);
       onUpdate?.();
       return;
     }
-    console.log('AUTH READY');
-    subscribe(state.currentBlockId || null);
+    // Solo recargar inventario cuando el UID cambia (login real),
+    // no en TOKEN_REFRESHED (mismo UID).
+    if (newUid === previousAuthUid) return;
+    previousAuthUid = newUid;
+    Logger.debug('[firestore] AUTH_STATE_CHANGED nuevo usuario:', newUid);
+    debouncedSubscribe(state.currentBlockId || null);
   });
 
   if (state.user) {
