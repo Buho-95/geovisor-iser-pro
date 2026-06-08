@@ -11,6 +11,7 @@ import { escapeHtml } from './core/safe-dom.js';
 
 import { storage } from './services/firebase.js';
 import { ref as storageRef, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+import { DB_PROVIDER } from './core/config.js';
 
 let blockPreviewDispose3D = null;
 let blockPreviewWired = false;
@@ -30,6 +31,10 @@ async function resolveFileUrlForPreview(file) {
   if (!file) return null;
   if (file.url) return file.url;
   if (file.storagePath) {
+    if (DB_PROVIDER === 'supabase') {
+      const { getSupabasePublicUrl } = await import('./services/supabase.js');
+      return getSupabasePublicUrl(file.storagePath);
+    }
     const r = storageRef(storage, file.storagePath);
     return await getDownloadURL(r);
   }
@@ -681,6 +686,10 @@ class DocPreviewModal {
   async _resolveUrl(file) {
     if (file?.url) return file.url;
     if (file?.storagePath) {
+      if (DB_PROVIDER === 'supabase') {
+        const { getSupabasePublicUrl } = await import('./services/supabase.js');
+        return getSupabasePublicUrl(file.storagePath);
+      }
       const r = storageRef(storage, file.storagePath);
       return await getDownloadURL(r);
     }

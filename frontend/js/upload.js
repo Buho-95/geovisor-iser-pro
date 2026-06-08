@@ -401,7 +401,6 @@ async function uploadSingleFileSupabase(file, tipoArchivo, carpeta, index, total
 
   try {
     const { url: urlDescarga, storagePath } = await uploadToSupabaseStorage(
-      'documentos_iser',
       rutaStorage,
       file,
       (pct) => {

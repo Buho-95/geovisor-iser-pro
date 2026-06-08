@@ -289,15 +289,105 @@ export async function deleteReportSupabase(reportId, storagePath) {
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Sube un archivo a Supabase Storage con progreso simulado.
- * @param {string} bucket - Nombre del bucket (ej: 'documentos_iser')
- * @param {string} storagePath - Ruta completa dentro del bucket
- * @param {File} file - Archivo a subir
- * @param {Function} onProgress - (percent: number) => void
+ * Resuelve el bucket de Supabase y la ruta interna a partir de un storagePath global.
+ * @param {string} storagePath - Ejemplo: "sedes/pamplona/.../modelos_bim/archivo.rvt"
+ * @returns {{ bucket: string, path: string }}
  */
-export async function uploadToSupabaseStorage(bucket, storagePath, file, onProgress) {
+export function resolveSupabaseBucketAndPath(storagePath) {
+  let bucket = 'documentos_iser';
+  if (storagePath.includes('modelos_bim/')) bucket = 'modelos_bim';
+  else if (storagePath.includes('capas_sig/')) bucket = 'capas_sig';
+  else if (storagePath.includes('auditorias/')) bucket = 'auditorias';
+
+  // Limpiar el nombre del bucket de la ruta si el storagePath era estilo Firebase
+  // (La migración guardó los archivos usando la ruta relativa sin el bucket en Supabase)
+  let cleanPath = storagePath;
+  const prefixes = ['documentos_iser/', 'modelos_bim/', 'capas_sig/', 'auditorias/'];
+  for (const p of prefixes) {
+    if (cleanPath.startsWith(p)) {
+      cleanPath = cleanPath.substring(p.length);
+      break;
+    }
+  }
+  return { bucket, path: cleanPath };
+}
+
+/**
+ * Lista archivos y subcarpetas en una ruta de Storage (imita el comportamiento de listAll de Firebase).
+ * @param {string} storagePath - La ruta completa de Firebase Storage a listar.
+ * @returns {Promise<{ items: Array, prefixes: Array }>}
+ */
+export async function listSupabaseStorage(storagePath) {
   const sb = getSupabaseClient();
-  // Supabase JS v2 no tiene progreso nativo — simulamos mediante upload directo
+  const { bucket, path } = resolveSupabaseBucketAndPath(storagePath);
+  
+  // Si la ruta no termina en '/', añadirla para buscar como directorio
+  const searchPath = path === '' || path.endsWith('/') ? path : path + '/';
+  
+  const { data, error } = await sb.storage.from(bucket).list(searchPath, {
+    limit: 1000,
+    offset: 0,
+    sortBy: { column: 'name', order: 'asc' },
+  });
+
+  if (error) {
+    console.warn('[Supabase Storage] list failed for path:', searchPath, error);
+    throw error;
+  }
+
+  const items = [];
+  const prefixes = [];
+
+  for (const item of data) {
+    // Si id es nulo o metadata es null, Supabase lo considera una subcarpeta (placeholder .emptyFolderPlaceholder)
+    // O si simplemente es un prefijo retornado por list
+    if (item.id === null || !item.metadata) {
+      prefixes.push({ name: item.name, fullPath: `${storagePath}/${item.name}`.replace(/\/\//g, '/') });
+    } else {
+      // Ignorar el archivo oculto .emptyFolderPlaceholder que Supabase usa para mantener carpetas
+      if (item.name === '.emptyFolderPlaceholder') continue;
+      
+      const fullPath = `${storagePath}/${item.name}`.replace(/\/\//g, '/');
+      const { data: { publicUrl } } = sb.storage.from(bucket).getPublicUrl(`${searchPath}${item.name}`);
+      items.push({
+        name: item.name,
+        fullPath: fullPath,
+        bucket: bucket,
+        size: item.metadata?.size || 0,
+        contentType: item.metadata?.mimetype || 'application/octet-stream',
+        updated: item.updated_at,
+        url: publicUrl
+      });
+    }
+  }
+
+  return { items, prefixes };
+}
+
+/**
+ * Sube un archivo a Supabase Storage con progreso simulado.
+ * Si se omite el bucket, se infiere automáticamente a partir del storagePath.
+ */
+export async function uploadToSupabaseStorage(bucketOrStoragePath, storagePathOrFile, fileOrProgress, onProgressObj) {
+  let bucket, storagePath, file, onProgress;
+
+  // Manejar sobrecarga de firma: (storagePath, file, onProgress) vs (bucket, storagePath, file, onProgress)
+  if (typeof storagePathOrFile === 'string' && fileOrProgress instanceof File) {
+    bucket = bucketOrStoragePath;
+    storagePath = storagePathOrFile;
+    file = fileOrProgress;
+    onProgress = onProgressObj;
+  } else {
+    // Firma automatizada: (storagePath, file, onProgress)
+    storagePath = bucketOrStoragePath;
+    file = storagePathOrFile;
+    onProgress = fileOrProgress;
+    const resolved = resolveSupabaseBucketAndPath(storagePath);
+    bucket = resolved.bucket;
+    storagePath = resolved.path;
+  }
+
+  const sb = getSupabaseClient();
   const { data, error } = await sb.storage
     .from(bucket)
     .upload(storagePath, file, {
@@ -307,15 +397,24 @@ export async function uploadToSupabaseStorage(bucket, storagePath, file, onProgr
   if (error) throw error;
   onProgress?.(100);
   const { data: { publicUrl } } = sb.storage.from(bucket).getPublicUrl(storagePath);
-  return { url: publicUrl, storagePath: data.path };
+  return { url: publicUrl, storagePath: storagePath };
 }
 
 /**
  * Elimina un archivo de Supabase Storage.
- * @param {string} bucket
- * @param {string} storagePath
+ * Puede ser llamado con (bucket, storagePath) o solo con (storagePath).
  */
-export async function deleteFromSupabaseStorage(bucket, storagePath) {
+export async function deleteFromSupabaseStorage(bucketOrPath, storagePathOpt) {
+  let bucket, storagePath;
+  if (storagePathOpt) {
+    bucket = bucketOrPath;
+    storagePath = storagePathOpt;
+  } else {
+    const resolved = resolveSupabaseBucketAndPath(bucketOrPath);
+    bucket = resolved.bucket;
+    storagePath = resolved.path;
+  }
+
   const sb = getSupabaseClient();
   const { error } = await sb.storage.from(bucket).remove([storagePath]);
   if (error) throw error;
@@ -323,8 +422,19 @@ export async function deleteFromSupabaseStorage(bucket, storagePath) {
 
 /**
  * Obtiene la URL pública de un archivo en Supabase Storage.
+ * Puede ser llamado con (bucket, storagePath) o solo con (storagePath).
  */
-export function getSupabasePublicUrl(bucket, storagePath) {
+export function getSupabasePublicUrl(bucketOrPath, storagePathOpt) {
+  let bucket, storagePath;
+  if (storagePathOpt) {
+    bucket = bucketOrPath;
+    storagePath = storagePathOpt;
+  } else {
+    const resolved = resolveSupabaseBucketAndPath(bucketOrPath);
+    bucket = resolved.bucket;
+    storagePath = resolved.path;
+  }
+
   const sb = getSupabaseClient();
   const { data: { publicUrl } } = sb.storage.from(bucket).getPublicUrl(storagePath);
   return publicUrl;

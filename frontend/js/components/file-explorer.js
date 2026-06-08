@@ -18,6 +18,7 @@ import { Logger } from '../core/logger.js';
 import { state } from '../core/state.js';
 import { buildStoragePath } from '../core/storage-routing.js';
 import { STORAGE_PREFIX } from '../core/paths.js';
+import { DB_PROVIDER } from '../core/config.js';
 import { storage } from '../services/firebase.js';
 import {
   ref as storageRef,
@@ -160,14 +161,24 @@ async function renderPath(host, { sedeId, path }) {
 
   try {
     // Query canonical + legacy paths in parallel for backwards compatibility
-    const folderRef = storageRef(storage, fullStoragePath);
-    const legacyPath = await buildLegacyStoragePath(sedeId, path);
-    const [canonicalResult, legacyResult] = await Promise.all([
-      listAll(folderRef),
-      legacyPath
-        ? listAll(storageRef(storage, legacyPath)).catch(() => null)
-        : Promise.resolve(null),
-    ]);
+    let canonicalResult, legacyResult;
+    if (DB_PROVIDER === 'supabase') {
+      const { listSupabaseStorage } = await import('../services/supabase.js');
+      [canonicalResult, legacyResult] = await Promise.all([
+        listSupabaseStorage(fullStoragePath).catch(() => ({ items: [], prefixes: [] })),
+        legacyPath
+          ? listSupabaseStorage(legacyPath).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+    } else {
+      const folderRef = storageRef(storage, fullStoragePath);
+      [canonicalResult, legacyResult] = await Promise.all([
+        listAll(folderRef).catch(() => ({ items: [], prefixes: [] })),
+        legacyPath
+          ? listAll(storageRef(storage, legacyPath)).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+    }
 
     // Merge items from both paths, deduplicating by filename (canonical wins)
     let mergedItems = [...(canonicalResult.items || [])];
@@ -189,6 +200,17 @@ async function renderPath(host, { sedeId, path }) {
     // Resolver metadata + URL en paralelo (con tolerancia a fallos individuales).
     const files = await Promise.all(items.map(async (it) => {
       try {
+        if (DB_PROVIDER === 'supabase') {
+          return {
+            name: it.name,
+            fullPath: it.fullPath,
+            size: it.size ?? null,
+            contentType: it.contentType ?? null,
+            updated: it.updated ?? null,
+            url: it.url,
+          };
+        }
+
         const [meta, url] = await Promise.all([
           getMetadata(it).catch(() => null),
           getDownloadURL(it).catch(() => null),
@@ -380,7 +402,12 @@ async function deleteFromCard(host, btn) {
   const fullPath = card.dataset.storagePath;
   if (!confirm(`¿Eliminar "${name}"?\n\nEsta acción no se puede deshacer.`)) return;
   try {
-    await deleteObject(storageRef(storage, fullPath));
+    if (DB_PROVIDER === 'supabase') {
+      const { deleteFromSupabaseStorage } = await import('../services/supabase.js');
+      await deleteFromSupabaseStorage(fullPath);
+    } else {
+      await deleteObject(storageRef(storage, fullPath));
+    }
     Logger.info(`[file-explorer] Eliminado: ${fullPath}`);
     // Emitir evento único (bootstrap lo escucha para invalidar caches del dashboard).
     try {

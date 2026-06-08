@@ -4,7 +4,7 @@ import { Logger } from './core/logger.js';
 import { ref as storageRef, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 import { doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { storage, db } from './services/firebase.js';
-import { dbPath } from './core/config.js';
+import { dbPath, DB_PROVIDER } from './core/config.js';
 import { init3DViewer } from './viewer3D.js';
 
 // Instancias globales de los visores para limpieza de memoria
@@ -699,16 +699,29 @@ export function setupVisorButtons() {
       eliminarBtn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Eliminando...';
 
       try {
-        // 1. Delete from Firebase Storage
-        if (file.storagePath) {
-          const fileRef = storageRef(storage, file.storagePath);
-          await deleteObject(fileRef);
-        }
+        if (DB_PROVIDER === 'supabase') {
+          const { deleteFromSupabaseStorage, getSupabaseClient } = await import('./services/supabase.js');
+          // 1. Delete from Supabase Storage
+          if (file.storagePath) {
+            await deleteFromSupabaseStorage(file.storagePath);
+          }
+          // 2. Delete Postgres row
+          if (file.id) {
+            const sb = getSupabaseClient();
+            await sb.from('archivos_iser').delete().eq('id', file.id);
+          }
+        } else {
+          // 1. Delete from Firebase Storage
+          if (file.storagePath) {
+            const fileRef = storageRef(storage, file.storagePath);
+            await deleteObject(fileRef);
+          }
 
-        // 2. Delete Firestore document
-        if (file.id) {
-          const docRef = doc(db, dbPath, file.id);
-          await deleteDoc(docRef);
+          // 2. Delete Firestore document
+          if (file.id) {
+            const docRef = doc(db, dbPath, file.id);
+            await deleteDoc(docRef);
+          }
         }
 
         // 3. Emit event for any listeners
